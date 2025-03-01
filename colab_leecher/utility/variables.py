@@ -1,6 +1,6 @@
 # copyright 2023 © Xron Trix | https://github.com/Xrontrix10
 
-
+import os
 from time import time
 from datetime import datetime
 from pyrogram.types import Message
@@ -75,9 +75,12 @@ class Paths:
     HERO_IMAGE = f"{WORK_PATH}/Hero.jpg"
     DEFAULT_HERO =  "/content/Telegram-Leecher/custom_thmb.jpg"
     MOUNTED_DRIVE = "/content/drive"
+    MOUNTED_DROPBOX = "/content/dropbox"
     down_path = f"{WORK_PATH}/Downloads"
     temp_dirleech_path = f"{WORK_PATH}/dir_leech_temp"
     mirror_dir = "/content/drive/MyDrive/Colab Leecher Uploads"
+    DBX_FOLDER = os.environ["DBX_FOLDER"] if os.environ["DBX_FOLDER"] else "Colab Leecher Uploads"
+    dropbox_mirror_dir = f"/content/dropbox/{DBX_FOLDER}"
     temp_zpath = f"{WORK_PATH}/Leeched_Files"
     temp_unzip_path = f"{WORK_PATH}/Unzipped_Files"
     temp_files_dir = f"{WORK_PATH}/leech_temp"

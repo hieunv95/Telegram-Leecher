@@ -172,6 +172,8 @@ async def taskScheduler():
 
     BotTimes.current_time = time()
 
+    if BOT.Mode.mode == "dropbox-mirror":
+        await Do_Dropbox_Mirror(BOT.SOURCE, is_dir, BOT.Mode.ytdl, is_zip, is_unzip, is_dualzip)
     if BOT.Mode.mode != "mirror":
         await Do_Leech(BOT.SOURCE, is_dir, BOT.Mode.ytdl, is_zip, is_unzip, is_dualzip)
     else:
@@ -250,6 +252,41 @@ async def Do_Mirror(source, is_ytdl, is_zip, is_unzip, is_dualzip):
     cdt = datetime.now()
     cdt_ = cdt.strftime("Uploaded » %Y-%m-%d %H:%M:%S")
     mirror_dir_ = ospath.join(Paths.mirror_dir, cdt_)
+
+    if is_zip:
+        await Zip_Handler(Paths.down_path, True, True)
+        shutil.copytree(Paths.temp_zpath, mirror_dir_)
+    elif is_unzip:
+        await Unzip_Handler(Paths.down_path, True)
+        shutil.copytree(Paths.temp_unzip_path, mirror_dir_)
+    elif is_dualzip:
+        await Unzip_Handler(Paths.down_path, True)
+        await Zip_Handler(Paths.temp_unzip_path, True, True)
+        shutil.copytree(Paths.temp_zpath, mirror_dir_)
+    else:
+        shutil.copytree(Paths.down_path, mirror_dir_)
+
+    await SendLogs(False)
+
+async def Do_Dropbox_Mirror(source, is_ytdl, is_zip, is_unzip, is_dualzip):
+    if not ospath.exists(Paths.MOUNTED_DROPBOX):
+        await cancelTask(
+            "Dropbox is NOT MOUNTED ! Stop the Bot and Run the Dropbox Cell to Mount, then Try again !"
+        )
+        return
+
+    if not ospath.exists(Paths.dropbox_mirror_dir):
+        makedirs(Paths.dropbox_mirror_dir)
+
+    await downloadManager(source, is_ytdl)
+
+    Transfer.total_down_size = getSize(Paths.down_path)
+
+    applyCustomName()
+
+    cdt = datetime.now()
+    cdt_ = cdt.strftime("Uploaded » %Y-%m-%d %H:%M:%S")
+    mirror_dir_ = ospath.join(Paths.dropbox_mirror_dir, cdt_)
 
     if is_zip:
         await Zip_Handler(Paths.down_path, True, True)
