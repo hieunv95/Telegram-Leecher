@@ -173,7 +173,7 @@ async def taskScheduler():
     BotTimes.current_time = time()
 
     if BOT.Mode.mode == "dropbox-mirror":
-        await Do_Dropbox_Mirror(BOT.SOURCE, is_dir, BOT.Mode.ytdl, is_zip, is_unzip, is_dualzip)
+        await Do_Dropbox_Mirror(BOT.SOURCE, BOT.Mode.ytdl, is_zip, is_unzip, is_dualzip)
     if BOT.Mode.mode != "mirror":
         await Do_Leech(BOT.SOURCE, is_dir, BOT.Mode.ytdl, is_zip, is_unzip, is_dualzip)
     else:
