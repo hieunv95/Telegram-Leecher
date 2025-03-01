@@ -174,10 +174,10 @@ async def taskScheduler():
 
     if BOT.Mode.mode == "dropbox-mirror":
         await Do_Dropbox_Mirror(BOT.SOURCE, BOT.Mode.ytdl, is_zip, is_unzip, is_dualzip)
-    if BOT.Mode.mode != "mirror":
-        await Do_Leech(BOT.SOURCE, is_dir, BOT.Mode.ytdl, is_zip, is_unzip, is_dualzip)
-    else:
+    elif BOT.Mode.mode == "mirror":
         await Do_Mirror(BOT.SOURCE, BOT.Mode.ytdl, is_zip, is_unzip, is_dualzip)
+    else:
+        await Do_Leech(BOT.SOURCE, is_dir, BOT.Mode.ytdl, is_zip, is_unzip, is_dualzip)
 
 
 async def Do_Leech(source, is_dir, is_ytdl, is_zip, is_unzip, is_dualzip):
@@ -284,21 +284,22 @@ async def Do_Dropbox_Mirror(source, is_ytdl, is_zip, is_unzip, is_dualzip):
 
     applyCustomName()
 
-    cdt = datetime.now()
-    cdt_ = cdt.strftime("Uploaded » %Y-%m-%d %H:%M:%S")
-    mirror_dir_ = ospath.join(Paths.dropbox_mirror_dir, cdt_)
+    #cdt = datetime.now()
+    #cdt_ = cdt.strftime("Uploaded » %Y-%m-%d %H:%M:%S")
+    #mirror_dir_ = ospath.join(Paths.dropbox_mirror_dir, cdt_)
+    mirror_dir_ = Paths.dropbox_mirror_dir;
 
     if is_zip:
         await Zip_Handler(Paths.down_path, True, True)
-        shutil.copytree(Paths.temp_zpath, mirror_dir_)
+        shutil.copytree(Paths.temp_zpath, mirror_dir_, dirs_exist_ok=True)
     elif is_unzip:
         await Unzip_Handler(Paths.down_path, True)
-        shutil.copytree(Paths.temp_unzip_path, mirror_dir_)
+        shutil.copytree(Paths.temp_unzip_path, mirror_dir_, dirs_exist_ok=True)
     elif is_dualzip:
         await Unzip_Handler(Paths.down_path, True)
         await Zip_Handler(Paths.temp_unzip_path, True, True)
-        shutil.copytree(Paths.temp_zpath, mirror_dir_)
+        shutil.copytree(Paths.temp_zpath, mirror_dir_, dirs_exist_ok=True)
     else:
-        shutil.copytree(Paths.down_path, mirror_dir_)
+        shutil.copytree(Paths.down_path, mirror_dir_, dirs_exist_ok=True)
 
     await SendLogs(False)
