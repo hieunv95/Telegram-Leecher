@@ -176,6 +176,8 @@ async def taskScheduler():
         await Do_Dropbox_Mirror(BOT.SOURCE, BOT.Mode.ytdl, is_zip, is_unzip, is_dualzip)
     elif BOT.Mode.mode == "mirror":
         await Do_Mirror(BOT.SOURCE, BOT.Mode.ytdl, is_zip, is_unzip, is_dualzip)
+    elif BOT.Mode.mode == "dropbox-mirror-leech":
+        await Do_Dropbox_Mirror_Leech(BOT.SOURCE, is_dir, BOT.Mode.ytdl, is_zip, is_unzip, is_dualzip)
     else:
         await Do_Leech(BOT.SOURCE, is_dir, BOT.Mode.ytdl, is_zip, is_unzip, is_dualzip)
 
@@ -303,3 +305,73 @@ async def Do_Dropbox_Mirror(source, is_ytdl, is_zip, is_unzip, is_dualzip):
         shutil.copytree(Paths.down_path, mirror_dir_, dirs_exist_ok=True)
 
     await SendLogs(False)
+
+async def Do_Dropbox_Mirror_Leech(source, is_dir, is_ytdl, is_zip, is_unzip, is_dualzip):
+    if not ospath.exists(Paths.MOUNTED_DROPBOX):
+        await cancelTask(
+            "Dropbox is NOT MOUNTED ! Stop the Bot and Run the Dropbox Cell to Mount, then Try again !"
+        )
+        return
+
+    if not ospath.exists(Paths.dropbox_mirror_dir):
+        makedirs(Paths.dropbox_mirror_dir)
+
+    mirror_dir_ = Paths.dropbox_mirror_dir;
+    if is_dir:
+        for s in source:
+            if not ospath.exists(s):
+                logging.error("Provided directory does not exist !")
+                await cancelTask("Provided directory does not exist !")
+                return
+            Paths.down_path = s
+            if is_zip:
+                await Zip_Handler(Paths.down_path, True, False)
+                shutil.copytree(Paths.temp_zpath, mirror_dir_, dirs_exist_ok=True)
+                await Leech(Paths.temp_zpath, True)
+            elif is_unzip:
+                await Unzip_Handler(Paths.down_path, False)
+                shutil.copytree(Paths.temp_unzip_path, mirror_dir_, dirs_exist_ok=True)
+                await Leech(Paths.temp_unzip_path, True)
+            elif is_dualzip:
+                await Unzip_Handler(Paths.down_path, False)
+                await Zip_Handler(Paths.temp_unzip_path, True, True)
+                shutil.copytree(Paths.temp_zpath, mirror_dir_, dirs_exist_ok=True)
+                await Leech(Paths.temp_zpath, True)
+            else:
+                shutil.copytree(Paths.down_path, mirror_dir_, dirs_exist_ok=True)
+                if ospath.isdir(s):
+                    await Leech(Paths.down_path, False)
+                else:
+                    Transfer.total_down_size = ospath.getsize(s)
+                    makedirs(Paths.temp_dirleech_path)
+                    shutil.copy(s, Paths.temp_dirleech_path)
+                    Messages.download_name = ospath.basename(s)
+                    await Leech(Paths.temp_dirleech_path, True)
+    else:
+        await downloadManager(source, is_ytdl)
+
+        Transfer.total_down_size = getSize(Paths.down_path)
+
+        # Renaming Files With Custom Name
+        applyCustomName()
+
+        # Preparing To Upload
+        if is_zip:
+            await Zip_Handler(Paths.down_path, True, True)
+            shutil.copytree(Paths.temp_zpath, mirror_dir_, dirs_exist_ok=True)
+            await Leech(Paths.temp_zpath, True)
+        elif is_unzip:
+            await Unzip_Handler(Paths.down_path, True)
+            shutil.copytree(Paths.temp_unzip_path, mirror_dir_, dirs_exist_ok=True)
+            await Leech(Paths.temp_unzip_path, True)
+        elif is_dualzip:
+            print("Got into un doubled zip")
+            await Unzip_Handler(Paths.down_path, True)
+            await Zip_Handler(Paths.temp_unzip_path, True, True)
+            shutil.copytree(Paths.temp_zpath, mirror_dir_, dirs_exist_ok=True)
+            await Leech(Paths.temp_zpath, True)
+        else:
+            shutil.copytree(Paths.down_path, mirror_dir_, dirs_exist_ok=True)
+            await Leech(Paths.down_path, True)
+
+    await SendLogs(True)

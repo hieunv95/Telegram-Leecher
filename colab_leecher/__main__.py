@@ -65,6 +65,16 @@ async def drive_upload(client, message):
 
     src_request_msg = await task_starter(message, text)
 
+@colab_bot.on_message(filters.command("dtupload") & filters.private)
+async def drive_upload(client, message):
+    global BOT, src_request_msg
+    BOT.Mode.mode = "dropbox-mirror-leech"
+    BOT.Mode.ytdl = False
+
+    text = "<b>⚡ Send Me DOWNLOAD LINK(s) 🔗»</b>\n\n🦀 Follow the below pattern\n\n<code>https//linktofile1.mp4\nhttps//linktofile2.mp4\n[Custom name space.mp4]\n{Password for zipping}\n(Password for unzip)</code>"
+
+    src_request_msg = await task_starter(message, text)
+
 
 @colab_bot.on_message(filters.command("drupload") & filters.private)
 async def directory_upload(client, message):
