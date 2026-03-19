@@ -447,7 +447,20 @@ async def unzip_pswd(client, message):
 @colab_bot.on_message(filters.command("help") & filters.private)
 async def help_command(client, message):
     msg = await message.reply_text(
-        "Send /start To Check If I am alive 🤨\n\nSend /colabxr and follow prompts to start transloading 🚀\n\nSend /settings to edit bot settings ⚙️\n\nSend /setname To Set Custom File Name 📛\n\nSend /zipaswd To Set Password For Zip File 🔐\n\nSend /unzipaswd To Set Password to Extract Archives 🔓\n\n⚠️ **You can ALWAYS SEND an image To Set it as THUMBNAIL for your files 🌄**",
+        "<b>Available Commands</b>\n\n"
+        "/start - Check bot status\n"
+        "/help - Show this help message\n"
+        "/tupload - Download from links and upload to Telegram\n"
+        "/gdupload - Download from links and upload to Google Drive\n"
+        "/dupload - Download from links and upload to Dropbox\n"
+        "/dtupload - Download from links and upload to Dropbox + Telegram\n"
+        "/drupload - Upload a local folder path to Telegram\n"
+        "/ytupload - Download via yt-dlp and upload to Telegram\n"
+        "/settings - Open bot settings (owner only)\n"
+        "/setname <code>name.ext</code> - Set custom output filename\n"
+        "/zipaswd <code>password</code> - Set zip password\n"
+        "/unzipaswd <code>password</code> - Set archive extraction password\n\n"
+        "⚠️ <b>You can also send an image anytime to set it as thumbnail 🌄</b>",
         quote=True,
         reply_markup=InlineKeyboardMarkup(
             [
