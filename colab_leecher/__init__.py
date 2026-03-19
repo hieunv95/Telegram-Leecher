@@ -1,8 +1,14 @@
 # copyright 2023 © Xron Trix | https://github.com/Xrontrix10
 
-import logging, json, asyncio
+import logging, json, asyncio, os
 from uvloop import install
 from pyrogram.client import Client
+
+# Headless/container defaults to avoid SDL/ALSA probing errors from media libs.
+os.environ.setdefault("XDG_RUNTIME_DIR", "/tmp")
+os.environ.setdefault("SDL_AUDIODRIVER", "dummy")
+os.environ.setdefault("SDL_VIDEODRIVER", "dummy")
+os.environ.setdefault("PYGAME_HIDE_SUPPORT_PROMPT", "1")
 
 # Read the dictionary from the txt file
 with open("/content/Telegram-Leecher/credentials.json", "r") as file:
