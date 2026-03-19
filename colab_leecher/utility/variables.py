@@ -81,7 +81,7 @@ class Paths:
     down_path = f"{WORK_PATH}/Downloads"
     temp_dirleech_path = f"{WORK_PATH}/dir_leech_temp"
     mirror_dir = "/content/drive/MyDrive/Colab Leecher Uploads"
-    DBX_FOLDER = os.environ["DBX_FOLDER"] if os.environ["DBX_FOLDER"] else "Colab Leecher Uploads"
+    DBX_FOLDER = os.getenv("DBX_FOLDER", "").strip() or "Colab Leecher Uploads"
     dropbox_mirror_dir = f"/content/dropbox/{DBX_FOLDER}"
     temp_zpath = f"{WORK_PATH}/Leeched_Files"
     temp_unzip_path = f"{WORK_PATH}/Unzipped_Files"
