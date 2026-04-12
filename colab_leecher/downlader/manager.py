@@ -30,6 +30,7 @@ from colab_leecher.utility.helper import (
     is_terabox,
     is_ytdl_link,
     is_telegram,
+    safe_edit_status,
 )
 from colab_leecher.downlader.gdrive import (
     build_service,
@@ -47,7 +48,7 @@ async def downloadManager(source, is_ytdl: bool):
         for i, link in enumerate(source):
             await YTDL_Status(link, i + 1)
         try:
-            await MSG.status_msg.edit_text(
+            await safe_edit_status(
                 text=Messages.task_msg + Messages.status_head + message + sysINFO(),
                 reply_markup=keyboard(),
             )
@@ -65,7 +66,7 @@ async def downloadManager(source, is_ytdl: bool):
                 elif is_ytdl_link(link):
                     await YTDL_Status(link, i + 1)
                     try:
-                        await MSG.status_msg.edit_text(
+                        await safe_edit_status(
                             text=Messages.task_msg
                             + Messages.status_head
                             + message
@@ -83,7 +84,7 @@ async def downloadManager(source, is_ytdl: bool):
                 elif is_terabox(link):
                     tera_dn = f"<b>PLEASE WAIT ⌛</b>\n\n__Generating Download Link For__\n\n<code>{link}</code>"
                     try:
-                        await MSG.status_msg.edit_text(
+                        await safe_edit_status(
                             text=tera_dn + sysINFO(), reply_markup=keyboard()
                         )
                     except Exception as e1:
@@ -93,7 +94,7 @@ async def downloadManager(source, is_ytdl: bool):
                 else:
                     aria2_dn = f"<b>PLEASE WAIT ⌛</b>\n\n__Getting Download Info For__\n\n<code>{link}</code>"
                     try:
-                        await MSG.status_msg.edit_text(
+                        await safe_edit_status(
                             text=aria2_dn + sysINFO(), reply_markup=keyboard()
                         )
                     except Exception as e1:

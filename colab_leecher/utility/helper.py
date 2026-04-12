@@ -3,6 +3,7 @@
 
 import os
 import math
+import asyncio
 import psutil
 import logging
 from time import time
@@ -22,6 +23,40 @@ from colab_leecher.utility.variables import (
     Messages,
     Paths,
 )
+
+
+_status_edit_lock = asyncio.Lock()
+_last_status_text = ""
+
+
+def _is_message_not_modified_error(error) -> bool:
+    err_text = str(error).lower()
+    return "message_not_modified" in err_text or "message was not modified" in err_text
+
+
+def reset_status_edit_cache(text: str = ""):
+    global _last_status_text
+    _last_status_text = text
+
+
+async def safe_edit_status(text: str, reply_markup=None, disable_web_page_preview=False):
+    global _last_status_text
+    async with _status_edit_lock:
+        if _last_status_text == text:
+            return MSG.status_msg
+        try:
+            MSG.status_msg = await MSG.status_msg.edit_text(
+                text=text,
+                disable_web_page_preview=disable_web_page_preview,
+                reply_markup=reply_markup,
+            )
+        except BadRequest as error:
+            if _is_message_not_modified_error(error):
+                _last_status_text = text
+                return MSG.status_msg
+            raise
+        _last_status_text = text
+        return MSG.status_msg
 
 
 def isLink(_, __, update):
@@ -396,13 +431,14 @@ async def status_bar(down_msg, speed, percentage, eta, done, left, engine):
     try:
         # Edit the message with updated progress information.
         if isTimeOver():
-            await MSG.status_msg.edit_text(
+            await safe_edit_status(
                 text=Messages.task_msg + down_msg + text + sysINFO(),
                 disable_web_page_preview=True,
                 reply_markup=keyboard(),
             )
     except BadRequest as e:
-        logging.error(f"Same Status Not Modified: {str(e)}")
+        if not _is_message_not_modified_error(e):
+            logging.error(f"Same Status Not Modified: {str(e)}")
     except Exception as e:
         # Catch any exceptions that might occur while editing the message.
         logging.error(f"Error Updating Status bar: {str(e)}")

@@ -8,7 +8,7 @@ from threading import Thread
 from os import makedirs, path as ospath
 from colab_leecher.utility.handler import cancelTask
 from colab_leecher.utility.variables import YTDL, MSG, Messages, Paths
-from colab_leecher.utility.helper import getTime, keyboard, sizeUnit, status_bar, sysINFO
+from colab_leecher.utility.helper import getTime, keyboard, sizeUnit, status_bar, sysINFO, safe_edit_status
 
 
 async def YTDL_Status(link, num):
@@ -24,7 +24,7 @@ async def YTDL_Status(link, num):
             sys_text = sysINFO()
             message = YTDL.header
             try:
-                await MSG.status_msg.edit_text(text=Messages.task_msg + Messages.status_head + message + sys_text, reply_markup=keyboard())
+                await safe_edit_status(text=Messages.task_msg + Messages.status_head + message + sys_text, reply_markup=keyboard())
             except Exception:
                 pass
         else:

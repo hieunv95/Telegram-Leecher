@@ -33,6 +33,7 @@ from colab_leecher.utility.helper import (
     getTime,
     keyboard,
     shortFileName,
+    safe_edit_status,
     sizeUnit,
     sysINFO,
 )
@@ -72,7 +73,7 @@ async def Leech(folder_path: str, remove: bool):
                 BotTimes.current_time = time()
                 Messages.status_head = f"<b>📤 UPLOADING SPLIT » {count} OF {len(dir_list)} Files</b>\n\n<code>{file_name}</code>\n"
                 try:
-                    MSG.status_msg = await MSG.status_msg.edit_text(
+                    await safe_edit_status(
                         text=Messages.task_msg
                         + Messages.status_head
                         + "\n⏳ __Starting.....__"
@@ -103,7 +104,7 @@ async def Leech(folder_path: str, remove: bool):
                 f"<b>📤 UPLOADING » </b>\n\n<code>{file_name}</code>\n"
             )
             try:
-                MSG.status_msg = await MSG.status_msg.edit_text(
+                await safe_edit_status(
                     text=Messages.task_msg
                     + Messages.status_head
                     + "\n⏳ __Starting.....__"
@@ -139,7 +140,7 @@ async def Zip_Handler(down_path: str, is_split: bool, remove: bool):
     )
 
     try:
-        MSG.status_msg = await MSG.status_msg.edit_text(
+        await safe_edit_status(
             text=Messages.task_msg + Messages.status_head + sysINFO(),
             reply_markup=keyboard(),
         )
@@ -167,7 +168,7 @@ async def Unzip_Handler(down_path: str, remove: bool):
         f"\n<b>📂 EXTRACTING » </b>\n\n<code>{Messages.download_name}</code>\n"
     )
 
-    MSG.status_msg = await MSG.status_msg.edit_text(
+    await safe_edit_status(
         text=Messages.task_msg
         + Messages.status_head
         + "\n⏳ __Starting.....__"
@@ -257,7 +258,7 @@ async def SendLogs(is_leech: bool):
         await MSG.sent_msg.reply_text(
             text=f"**SOURCE »** __[Here]({Messages.src_link})__" + last_text
         )
-        await MSG.status_msg.edit_text(
+        await safe_edit_status(
             text=Messages.task_msg + l_ink + last_text,
             reply_markup=InlineKeyboardMarkup(
                 [

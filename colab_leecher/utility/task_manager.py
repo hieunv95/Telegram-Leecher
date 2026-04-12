@@ -18,6 +18,8 @@ from colab_leecher.utility.helper import (
     keyboard,
     sizeUnit,
     status_bar,
+    safe_edit_status,
+    reset_status_edit_cache,
     sysINFO,
     is_google_drive,
     is_telegram,
@@ -162,6 +164,7 @@ async def taskScheduler():
         + sysINFO(),
         reply_markup=keyboard(),
     )
+    reset_status_edit_cache(MSG.status_msg.caption or "")
 
     await calDownSize(BOT.SOURCE)
 
@@ -286,7 +289,7 @@ async def Do_Terabox_Mirror(source, is_ytdl):
 
     Messages.status_head = f"<b>⬆️ UPLOADING TO TERABOX » </b>\n"
     try:
-        await MSG.status_msg.edit_text(
+        await safe_edit_status(
             text=Messages.task_msg
             + Messages.status_head
             + f"\n⏳ __Starting.....__"
@@ -324,7 +327,7 @@ async def Do_Terabox_Mirror_Leech(source, is_ytdl):
 
     Messages.status_head = f"<b>⬆️ UPLOADING TO TERABOX » </b>\n"
     try:
-        await MSG.status_msg.edit_text(
+        await safe_edit_status(
             text=Messages.task_msg
             + Messages.status_head
             + f"\n⏳ __Starting.....__"

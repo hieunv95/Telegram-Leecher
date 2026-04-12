@@ -21,6 +21,7 @@ from colab_leecher.utility.helper import (
     sizeUnit,
     speedETA,
     status_bar,
+    safe_edit_status,
     sysINFO,
     getTime,
 )
@@ -45,7 +46,7 @@ async def videoConverter(file: str):
         messg += f"\n├⚙️ **Engine »** __{engine}__\n├💪🏼 **Handler »** __{core}__"
         messg += f"\n╰🍃 **Time Spent »** __{getTime((datetime.now() - BotTimes.start_time).seconds)}__"
         try:
-            await MSG.status_msg.edit_text(
+            await safe_edit_status(
                 text=Messages.task_msg + mtext + messg + sysINFO(),
                 reply_markup=keyboard(),
             )
