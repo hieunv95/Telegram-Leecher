@@ -217,6 +217,26 @@ def _upload_single_file(
         precreate_block_list[0][:12] if precreate_block_list else "none",
     )
 
+    def _emit_progress(uploaded_bytes: int, partseq: int, total_parts: int):
+        if not progress_callback:
+            return
+        try:
+            progress_callback(
+                {
+                    "file_name": file_name,
+                    "file_index": file_index,
+                    "total_files": total_files,
+                    "partseq": partseq,
+                    "total_parts": total_parts,
+                    "remote_path": remote_path,
+                    "size": file_size,
+                    "uploaded_bytes": uploaded_bytes,
+                    "total_bytes": file_size,
+                }
+            )
+        except Exception as callback_error:
+            logging.info("Terabox progress callback failed: %s", callback_error)
+
     with requests.Session() as session:
         precreate_res = session.post(
             precreate_url,
@@ -235,6 +255,7 @@ def _upload_single_file(
             upload_headers.pop("Content-Type", None)
 
         uploaded_block_list = []
+        uploaded_bytes = 0
         if use_chunking:
             total_parts = len(precreate_block_list)
             for partseq, chunk, expected_md in _iter_file_chunks(file_path):
@@ -256,6 +277,8 @@ def _upload_single_file(
                     file_name,
                 )
                 uploaded_block_list.append(uploaded_md)
+                uploaded_bytes += len(chunk)
+                _emit_progress(uploaded_bytes, partseq + 1, total_parts)
                 logging.info(
                     "Terabox chunk uploaded: %s part %s of %s",
                     file_name,
@@ -283,26 +306,13 @@ def _upload_single_file(
                 file_name,
             )
             uploaded_block_list.append(uploaded_md)
+            uploaded_bytes = file_size
+            _emit_progress(uploaded_bytes, 1, 1)
             logging.info(
                 "Terabox file uploaded: %s (%s bytes)",
                 file_name,
                 file_size,
             )
-
-        if progress_callback:
-            try:
-                progress_callback(
-                    {
-                        "file_name": file_name,
-                        "file_index": file_index,
-                        "total_files": total_files,
-                        "remote_path": remote_path,
-                        "size": file_size,
-                        "total_parts": len(uploaded_block_list),
-                    }
-                )
-            except Exception as callback_error:
-                logging.info("Terabox progress callback failed: %s", callback_error)
 
         create_url = build_create_url(
             Paths.TERABOX_APP_ID,

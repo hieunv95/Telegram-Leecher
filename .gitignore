@@ -9,3 +9,5 @@ testing_purpose/
 __pycache__/
 
 *.session
+
+.venv/

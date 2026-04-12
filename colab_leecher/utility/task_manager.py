@@ -13,8 +13,11 @@ from colab_leecher import OWNER, colab_bot, DUMP_ID
 from colab_leecher.downlader.manager import calDownSize, get_d_name, downloadManager
 from colab_leecher.utility.helper import (
     getSize,
+    getTime,
     applyCustomName,
     keyboard,
+    sizeUnit,
+    status_bar,
     sysINFO,
     is_google_drive,
     is_telegram,
@@ -190,6 +193,8 @@ async def taskScheduler():
 
 def _terabox_progress_callback(loop, status_message):
     last_emit = [0.0]
+    current_file = [""]
+    start_time = [datetime.now()]
 
     def _callback(progress_info):
         file_name = progress_info.get("file_name", "Unknown file")
@@ -198,19 +203,37 @@ def _terabox_progress_callback(loop, status_message):
         partseq = progress_info.get("partseq", 0)
         total_parts = progress_info.get("total_parts", 0)
         remote_path = progress_info.get("remote_path", "")
+        total_bytes = progress_info.get("total_bytes", progress_info.get("size", 0))
+        uploaded_bytes = progress_info.get("uploaded_bytes")
+
+        if uploaded_bytes is None:
+            if total_parts > 0 and total_bytes > 0 and partseq > 0:
+                uploaded_bytes = int((partseq / total_parts) * total_bytes)
+            else:
+                uploaded_bytes = total_bytes
+
+        uploaded_bytes = max(0, min(uploaded_bytes, total_bytes))
+
+        if current_file[0] != file_name:
+            current_file[0] = file_name
+            start_time[0] = datetime.now()
+
+        elapsed = max((datetime.now() - start_time[0]).total_seconds(), 1e-3)
+        speed = uploaded_bytes / elapsed
+        percentage = (uploaded_bytes / total_bytes * 100) if total_bytes > 0 else 0.0
+        eta_seconds = ((total_bytes - uploaded_bytes) / speed) if speed > 0 else 0.0
 
         now = time()
-        if partseq not in (1, total_parts) and now - last_emit[0] < 5:
+        is_terminal_update = uploaded_bytes >= total_bytes and total_bytes > 0
+        if not is_terminal_update and now - last_emit[0] < 5:
             return
         last_emit[0] = now
 
-        text = (
-            Messages.task_msg
-            + f"<b>⬆️ UPLOADING TO TERABOX » </b>\n"
+        down_msg = (
+            f"<b>⬆️ UPLOADING TO TERABOX » </b>\n"
             + f"<code>{file_name}</code>\n"
             + f"<b>File:</b> {file_index}/{total_files} | <b>Chunk:</b> {partseq}/{total_parts}\n"
-            + f"<code>{remote_path}</code>"
-            + sysINFO()
+            + f"<code>{remote_path}</code>\n"
         )
 
         def _log_future_result(done_future):
@@ -230,7 +253,15 @@ def _terabox_progress_callback(loop, status_message):
 
         try:
             future = asyncio.run_coroutine_threadsafe(
-                status_message.edit_text(text=text, reply_markup=keyboard()),
+                status_bar(
+                    down_msg=down_msg,
+                    speed=f"{sizeUnit(speed)}/s",
+                    percentage=percentage,
+                    eta=getTime(int(eta_seconds)),
+                    done=sizeUnit(uploaded_bytes),
+                    left=sizeUnit(total_bytes),
+                    engine="Terabox 🍑",
+                ),
                 loop,
             )
             future.add_done_callback(_log_future_result)
@@ -303,10 +334,12 @@ async def Do_Terabox_Mirror_Leech(source, is_ytdl):
     except Exception as e:
         logging.info(f"Error updating Terabox status bar: {e}")
 
+    loop = asyncio.get_running_loop()
     terabox_task = asyncio.create_task(
         upload_to_terabox(
             Paths.down_path,
             Paths.TERABOX_FOLDER,
+            progress_callback=_terabox_progress_callback(loop, MSG.status_msg),
         )
     )
     telegram_task = asyncio.create_task(Leech(Paths.down_path, False))
