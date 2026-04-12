@@ -303,18 +303,38 @@ async def Do_Terabox_Mirror_Leech(source, is_ytdl):
     except Exception as e:
         logging.info(f"Error updating Terabox status bar: {e}")
 
-    try:
-        loop = asyncio.get_running_loop()
-        await upload_to_terabox(
+    terabox_task = asyncio.create_task(
+        upload_to_terabox(
             Paths.down_path,
             Paths.TERABOX_FOLDER,
-            progress_callback=_terabox_progress_callback(loop, MSG.status_msg),
         )
-    except Exception as e:
-        await cancelTask(f"Terabox Upload Error: {str(e)}")
-        return
+    )
+    telegram_task = asyncio.create_task(Leech(Paths.down_path, False))
 
-    await Leech(Paths.down_path, True)
+    done, pending = await asyncio.wait(
+        {terabox_task, telegram_task},
+        return_when=asyncio.FIRST_EXCEPTION,
+    )
+
+    for task in done:
+        err = task.exception()
+        if err is not None:
+            for pending_task in pending:
+                pending_task.cancel()
+            if pending:
+                await asyncio.gather(*pending, return_exceptions=True)
+
+            if task is terabox_task:
+                await cancelTask(f"Terabox Upload Error: {str(err)}")
+            else:
+                await cancelTask(f"Telegram Upload Error: {str(err)}")
+            return
+
+    if pending:
+        await asyncio.gather(*pending)
+
+    if ospath.exists(Paths.down_path):
+        shutil.rmtree(Paths.down_path)
 
     await SendLogs(True)
 
