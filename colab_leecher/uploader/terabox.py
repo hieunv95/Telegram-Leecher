@@ -11,8 +11,6 @@ from os import path as ospath
 from urllib.parse import urlencode, quote
 from colab_leecher.utility.variables import Paths
 
-TERABOX_CHUNK_SIZE = 4 * 1024 * 1024
-
 
 def _normalize_remote_dir(remote_dir: str):
     if not remote_dir:
@@ -118,14 +116,10 @@ def build_video_download_url(app_id: str, video_path: str):
 
 
 def _compute_block_list(file_path: str):
-    block_list = []
+    """Compute MD5 hash of entire file as single block."""
     with open(file_path, "rb") as file_buffer:
-        while True:
-            chunk = file_buffer.read(TERABOX_CHUNK_SIZE)
-            if not chunk:
-                break
-            block_list.append(hashlib.md5(chunk).hexdigest().upper())
-    return block_list
+        file_md5 = hashlib.md5(file_buffer.read()).hexdigest().upper()
+    return [file_md5]
 
 
 def _response_json(response, error_prefix: str):
@@ -176,11 +170,10 @@ def _upload_single_file(
         precreate_data["bdstoken"] = Paths.TERABOX_BDSTOKEN
 
     logging.debug(
-        "Terabox precreate metadata: file=%s size=%s chunks=%s first_chunk_md5=%s",
+        "Terabox precreate metadata: file=%s size=%s file_md5=%s",
         file_name,
         file_size,
-        len(block_list),
-        (block_list[0][:12] if block_list else "none"),
+        block_list[0][:12] if block_list else "none",
     )
 
     with requests.Session() as session:
@@ -200,51 +193,44 @@ def _upload_single_file(
         if "Content-Type" in upload_headers:
             upload_headers.pop("Content-Type", None)
 
+        # Upload entire file as single block
+        upload_url = build_upload_url(
+            remote_path,
+            uploadid,
+            Paths.TERABOX_APP_ID,
+            0,
+        )
+        if Paths.TERABOX_BDSTOKEN:
+            upload_url += f"&bdstoken={Paths.TERABOX_BDSTOKEN}"
+
         with open(file_path, "rb") as upload_buffer:
-            partseq = 0
-            while True:
-                chunk = upload_buffer.read(TERABOX_CHUNK_SIZE)
-                if not chunk:
-                    break
+            file_content = upload_buffer.read()
 
-                upload_url = build_upload_url(
-                    remote_path,
-                    uploadid,
-                    Paths.TERABOX_APP_ID,
-                    partseq,
+        upload_res = session.post(
+            upload_url,
+            headers=upload_headers,
+            files={"file": ("blob", file_content)},
+            timeout=3600,
+        )
+        _response_json(upload_res, "Terabox file upload failed")
+        logging.info(
+            "Terabox file uploaded: %s (%s bytes)",
+            file_name,
+            file_size,
+        )
+        if progress_callback:
+            try:
+                progress_callback(
+                    {
+                        "file_name": file_name,
+                        "file_index": file_index,
+                        "total_files": total_files,
+                        "remote_path": remote_path,
+                        "size": file_size,
+                    }
                 )
-                if Paths.TERABOX_BDSTOKEN:
-                    upload_url += f"&bdstoken={Paths.TERABOX_BDSTOKEN}"
-
-                upload_res = session.post(
-                    upload_url,
-                    headers=upload_headers,
-                    files={"file": ("blob", chunk)},
-                    timeout=3600,
-                )
-                _response_json(upload_res, f"Terabox chunk {partseq} upload failed")
-                logging.info(
-                    "Terabox chunk uploaded: %s part %s of %s",
-                    file_name,
-                    partseq + 1,
-                    len(block_list),
-                )
-                if progress_callback:
-                    try:
-                        progress_callback(
-                            {
-                                "file_name": file_name,
-                                "file_index": file_index,
-                                "total_files": total_files,
-                                "partseq": partseq + 1,
-                                "total_parts": len(block_list),
-                                "remote_path": remote_path,
-                                "size": file_size,
-                            }
-                        )
-                    except Exception as callback_error:
-                        logging.info("Terabox progress callback failed: %s", callback_error)
-                partseq += 1
+            except Exception as callback_error:
+                logging.info("Terabox progress callback failed: %s", callback_error)
 
         create_url = build_create_url(
             Paths.TERABOX_APP_ID,
@@ -265,10 +251,9 @@ def _upload_single_file(
             create_data["bdstoken"] = Paths.TERABOX_BDSTOKEN
 
         logging.debug(
-            "Terabox create metadata: file=%s size=%s chunks=%s uploadid=%s",
+            "Terabox create metadata: file=%s size=%s uploadid=%s",
             file_name,
             file_size,
-            len(block_list),
             uploadid,
         )
 
