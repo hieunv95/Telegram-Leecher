@@ -8,7 +8,7 @@ from random import choices
 from string import ascii_uppercase, digits
 from asyncio import to_thread
 from os import path as ospath
-from urllib.parse import urlencode
+from urllib.parse import urlencode, quote
 from colab_leecher.utility.variables import Paths
 
 TERABOX_CHUNK_SIZE = 4 * 1024 * 1024
@@ -73,6 +73,50 @@ def _api_common(dp_logid: str):
     return common
 
 
+def build_precreate_url(app_id: str, js_token: str, dp_logid: str):
+    return (
+        "https://www.1024terabox.com/api/precreate"
+        f"?app_id={app_id}&web=1&channel=dubox&clienttype=0"
+        f"&jsToken={js_token}&dp-logid={dp_logid}"
+    )
+
+
+def build_upload_url(path_value: str, upload_id: str, app_id: str, partseq: int):
+    encoded_path = quote(path_value, safe="")
+    return (
+        "https://c-jp.1024terabox.com/rest/2.0/pcs/superfile2"
+        f"?method=upload&app_id={app_id}&channel=dubox&clienttype=0&web=1"
+        f"&path={encoded_path}&uploadid={upload_id}&uploadsign=0&partseq={partseq}"
+    )
+
+
+def build_create_url(app_id: str, js_token: str, dp_logid: str):
+    return (
+        "https://www.1024terabox.com/api/create"
+        f"?app_id={app_id}&web=1&channel=dubox&clienttype=0"
+        f"&jsToken={js_token}&dp-logid={dp_logid}"
+    )
+
+
+def build_list_url(app_id: str, directory: str, js_token: str, dp_logid: str):
+    encoded_directory = quote(directory, safe="")
+    return (
+        "https://www.1024terabox.com/api/list"
+        f"?app_id={app_id}&web=1&channel=dubox&clienttype=0"
+        f"&jsToken={js_token}&dp-logid={dp_logid}&order=time&desc=1"
+        f"&dir={encoded_directory}&num=100&page=1&showempty=0"
+    )
+
+
+def build_video_download_url(app_id: str, video_path: str):
+    encoded_path = quote(video_path, safe="")
+    return (
+        "https://www.1024terabox.com/api/streaming"
+        f"?path={encoded_path}&app_id={app_id}&clienttype=0"
+        "&type=M3U8_FLV_264_480&vip=1"
+    )
+
+
 def _compute_block_list(file_path: str):
     block_list = []
     with open(file_path, "rb") as file_buffer:
@@ -115,7 +159,11 @@ def _upload_single_file(
     common = _api_common(dp_logid)
     remote_path = _build_remote_path(remote_dir, file_name)
 
-    precreate_url = "https://www.1024terabox.com/api/precreate"
+    precreate_url = build_precreate_url(
+        Paths.TERABOX_APP_ID,
+        Paths.TERABOX_JS_TOKEN,
+        dp_logid,
+    )
     precreate_data = {
         "path": remote_path,
         "autoinit": 1,
@@ -123,8 +171,9 @@ def _upload_single_file(
         "block_list": json.dumps(block_list),
         "size": file_size,
         "local_mtime": local_mtime,
-        **common,
     }
+    if Paths.TERABOX_BDSTOKEN:
+        precreate_data["bdstoken"] = Paths.TERABOX_BDSTOKEN
 
     with requests.Session() as session:
         precreate_res = session.post(
@@ -139,7 +188,6 @@ def _upload_single_file(
         if not uploadid:
             raise RuntimeError("Terabox precreate failed: missing uploadid")
 
-        upload_url = "https://c-all.terabox.com/rest/2.0/pcs/superfile2"
         upload_headers = _request_headers(content_type=False)
         if "Content-Type" in upload_headers:
             upload_headers.pop("Content-Type", None)
@@ -151,24 +199,18 @@ def _upload_single_file(
                 if not chunk:
                     break
 
-                upload_params = {
-                    "method": "upload",
-                    "app_id": Paths.TERABOX_APP_ID,
-                    "channel": "dubox",
-                    "clienttype": "0",
-                    "web": "1",
-                    "path": remote_path,
-                    "uploadid": uploadid,
-                    "uploadsign": "0",
-                    "partseq": partseq,
-                }
+                upload_url = build_upload_url(
+                    remote_path,
+                    uploadid,
+                    Paths.TERABOX_APP_ID,
+                    partseq,
+                )
                 if Paths.TERABOX_BDSTOKEN:
-                    upload_params["bdstoken"] = Paths.TERABOX_BDSTOKEN
+                    upload_url += f"&bdstoken={Paths.TERABOX_BDSTOKEN}"
 
                 upload_res = session.post(
                     upload_url,
                     headers=upload_headers,
-                    params=upload_params,
                     files={"file": ("blob", chunk)},
                     timeout=3600,
                 )
@@ -196,7 +238,11 @@ def _upload_single_file(
                         logging.info("Terabox progress callback failed: %s", callback_error)
                 partseq += 1
 
-        create_url = "https://www.1024terabox.com/api/create"
+        create_url = build_create_url(
+            Paths.TERABOX_APP_ID,
+            Paths.TERABOX_JS_TOKEN,
+            dp_logid,
+        )
         create_data = {
             "path": remote_path,
             "size": file_size,
@@ -206,8 +252,9 @@ def _upload_single_file(
             "local_mtime": local_mtime,
             "isdir": "0",
             "rtype": "1",
-            **common,
         }
+        if Paths.TERABOX_BDSTOKEN:
+            create_data["bdstoken"] = Paths.TERABOX_BDSTOKEN
 
         create_res = session.post(
             create_url,
