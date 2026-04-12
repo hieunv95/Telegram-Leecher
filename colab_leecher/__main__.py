@@ -4,16 +4,44 @@
 import logging, os
 from pyrogram import filters
 from datetime import datetime
+from urllib.parse import urlparse
 from asyncio import sleep, get_event_loop
 from colab_leecher import colab_bot, OWNER
 from colab_leecher.utility.handler import cancelTask
 from .utility.variables import BOT, MSG, BotTimes, Paths
 from .utility.task_manager import taskScheduler, task_starter
 from pyrogram.types import InlineKeyboardButton, InlineKeyboardMarkup
-from .utility.helper import isLink, setThumbnail, message_deleter, send_settings
+from .utility.helper import (
+    isLink,
+    is_google_drive,
+    is_telegram,
+    is_mega,
+    is_terabox,
+    is_torrent,
+    setThumbnail,
+    message_deleter,
+    send_settings,
+)
 
 
 src_request_msg = None
+
+
+def _is_direct_http_url(link: str):
+    parsed = urlparse(link)
+    if parsed.scheme not in ("http", "https") or not parsed.netloc:
+        return False
+
+    if (
+        is_google_drive(link)
+        or is_telegram(link)
+        or is_mega(link)
+        or is_terabox(link)
+        or is_torrent(link)
+    ):
+        return False
+
+    return True
 
 
 @colab_bot.on_message(filters.command("start") & filters.private)
@@ -72,6 +100,28 @@ async def drive_upload(client, message):
     BOT.Mode.ytdl = False
 
     text = "<b>⚡ Send Me DOWNLOAD LINK(s) 🔗»</b>\n\n🦀 Follow the below pattern\n\n<code>https//linktofile1.mp4\nhttps//linktofile2.mp4\n[Custom name space.mp4]\n{Password for zipping}\n(Password for unzip)</code>"
+
+    src_request_msg = await task_starter(message, text)
+
+
+@colab_bot.on_message(filters.command("tbupload") & filters.private)
+async def terabox_upload(client, message):
+    global BOT, src_request_msg
+    BOT.Mode.mode = "terabox-mirror"
+    BOT.Mode.ytdl = False
+
+    text = "<b>⚡ Send Me DIRECT DOWNLOAD LINK(s) 🔗»</b>\n\n🦀 Follow the below pattern\n\n<code>https://linktofile1.mp4\nhttps://linktofile2.mp4\n[Custom name space.mp4]</code>\n\n<i>Only regular direct HTTP/HTTPS links are supported in this mode.</i>"
+
+    src_request_msg = await task_starter(message, text)
+
+
+@colab_bot.on_message(filters.command("ttupload") & filters.private)
+async def terabox_telegram_upload(client, message):
+    global BOT, src_request_msg
+    BOT.Mode.mode = "terabox-mirror-leech"
+    BOT.Mode.ytdl = False
+
+    text = "<b>⚡ Send Me DIRECT DOWNLOAD LINK(s) 🔗»</b>\n\n🦀 Follow the below pattern\n\n<code>https://linktofile1.mp4\nhttps://linktofile2.mp4\n[Custom name space.mp4]</code>\n\n<i>Only regular direct HTTP/HTTPS links are supported in this mode.</i>"
 
     src_request_msg = await task_starter(message, text)
 
@@ -151,6 +201,35 @@ async def handle_url(client, message):
                 break
 
         BOT.SOURCE = temp_source
+
+        if BOT.Mode.mode in ["terabox-mirror", "terabox-mirror-leech"]:
+            invalid_links = [link for link in BOT.SOURCE if not _is_direct_http_url(link)]
+            if invalid_links:
+                await message.reply_text(
+                    "<b>❌ Invalid source for Terabox mode.</b>\n\nPlease send only direct HTTP/HTTPS download link(s).\nGoogle Drive, Telegram, Mega, TeraBox and magnet links are not allowed in /tbupload or /ttupload.",
+                    quote=True,
+                )
+                return
+
+            BOT.Mode.type = "normal"
+            MSG.status_msg = await colab_bot.send_message(
+                chat_id=OWNER,
+                text="#STARTING_TASK\n\n**Starting your task in a few Seconds...🦐**",
+                reply_markup=InlineKeyboardMarkup(
+                    [
+                        [InlineKeyboardButton("Cancel ❌", callback_data="cancel")],
+                    ]
+                ),
+            )
+            BOT.State.task_going = True
+            BOT.State.started = False
+            BotTimes.start_time = datetime.now()
+            event_loop = get_event_loop()
+            BOT.TASK = event_loop.create_task(taskScheduler())  # type: ignore
+            await BOT.TASK
+            BOT.State.task_going = False
+            return
+
         keyboard = InlineKeyboardMarkup(
             [
                 [InlineKeyboardButton("Regular", callback_data="normal")],
@@ -454,6 +533,8 @@ async def help_command(client, message):
         "/gdupload - Download from links and upload to Google Drive\n"
         "/dupload - Download from links and upload to Dropbox\n"
         "/dtupload - Download from links and upload to Dropbox + Telegram\n"
+        "/tbupload - Download direct links and upload to Terabox\n"
+        "/ttupload - Download direct links and upload to Terabox + Telegram\n"
         "/drupload - Upload a local folder path to Telegram\n"
         "/ytupload - Download via yt-dlp and upload to Telegram\n"
         "/settings - Open bot settings (owner only)\n"

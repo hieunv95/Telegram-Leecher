@@ -32,6 +32,7 @@
 - Upload Directly From Colab Container
 - Auto Generate Thumbnail From Video Files 
 - Download Directly To Google Drive / Mirroring
+- Upload Directly To TeraBox via Bot Commands
 - Zip Folders/Files
 - Split support for all files > 2GB/4GB
 
@@ -94,6 +95,23 @@
 > - password cracking
 
 <sub>Source: <a href="https://research.google.com/colaboratory/faq.html">Colab FAQ</a></sub>
+
+## **🧩 Terabox Upload Modes**
+
+- `/tbupload` → Download from direct HTTP/HTTPS links and upload to Terabox
+- `/ttupload` → Download from direct HTTP/HTTPS links and upload to Terabox + Telegram
+
+Required environment variables:
+
+- `TERABOX_NDUS`
+- `TERABOX_JS_TOKEN`
+
+Optional:
+
+- `TERABOX_FOLDER` (default: `/Colab Leecher Uploads`)
+- `TERABOX_BDSTOKEN`
+- `TERABOX_DP_LOGID`
+- `TERABOX_APP_ID` (default: `250528`)
 
 <br>
 

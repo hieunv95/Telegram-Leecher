@@ -83,6 +83,12 @@ class Paths:
     mirror_dir = "/content/drive/MyDrive/Colab Leecher Uploads"
     DBX_FOLDER = os.getenv("DBX_FOLDER", "").strip() or "Colab Leecher Uploads"
     dropbox_mirror_dir = f"/content/dropbox/{DBX_FOLDER}"
+    TERABOX_FOLDER = os.getenv("TERABOX_FOLDER", "").strip() or "/Colab Leecher Uploads"
+    TERABOX_NDUS = os.getenv("TERABOX_NDUS", "").strip()
+    TERABOX_JS_TOKEN = os.getenv("TERABOX_JS_TOKEN", "").strip()
+    TERABOX_BDSTOKEN = os.getenv("TERABOX_BDSTOKEN", "").strip()
+    TERABOX_DP_LOGID = os.getenv("TERABOX_DP_LOGID", "").strip()
+    TERABOX_APP_ID = os.getenv("TERABOX_APP_ID", "").strip() or "250528"
     temp_zpath = f"{WORK_PATH}/Leeched_Files"
     temp_unzip_path = f"{WORK_PATH}/Unzipped_Files"
     temp_files_dir = f"{WORK_PATH}/leech_temp"

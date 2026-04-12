@@ -29,6 +29,7 @@ from colab_leecher.utility.handler import (
     SendLogs,
     cancelTask,
 )
+from colab_leecher.uploader.terabox import upload_to_terabox, validate_terabox_credentials
 from colab_leecher.utility.variables import (
     BOT,
     MSG,
@@ -172,7 +173,11 @@ async def taskScheduler():
 
     BotTimes.current_time = time()
 
-    if BOT.Mode.mode == "dropbox-mirror":
+    if BOT.Mode.mode == "terabox-mirror":
+        await Do_Terabox_Mirror(BOT.SOURCE, BOT.Mode.ytdl)
+    elif BOT.Mode.mode == "terabox-mirror-leech":
+        await Do_Terabox_Mirror_Leech(BOT.SOURCE, BOT.Mode.ytdl)
+    elif BOT.Mode.mode == "dropbox-mirror":
         await Do_Dropbox_Mirror(BOT.SOURCE, BOT.Mode.ytdl, is_zip, is_unzip, is_dualzip)
     elif BOT.Mode.mode == "mirror":
         await Do_Mirror(BOT.SOURCE, BOT.Mode.ytdl, is_zip, is_unzip, is_dualzip)
@@ -180,6 +185,50 @@ async def taskScheduler():
         await Do_Dropbox_Mirror_Leech(BOT.SOURCE, is_dir, BOT.Mode.ytdl, is_zip, is_unzip, is_dualzip)
     else:
         await Do_Leech(BOT.SOURCE, is_dir, BOT.Mode.ytdl, is_zip, is_unzip, is_dualzip)
+
+
+async def Do_Terabox_Mirror(source, is_ytdl):
+    is_ok, reason = validate_terabox_credentials()
+    if not is_ok:
+        await cancelTask(f"Terabox Credentials Error: {reason}")
+        return
+
+    await downloadManager(source, is_ytdl)
+
+    Transfer.total_down_size = getSize(Paths.down_path)
+
+    applyCustomName()
+
+    try:
+        await upload_to_terabox(Paths.down_path, Paths.TERABOX_FOLDER)
+    except Exception as e:
+        await cancelTask(f"Terabox Upload Error: {str(e)}")
+        return
+
+    await SendLogs(False)
+
+
+async def Do_Terabox_Mirror_Leech(source, is_ytdl):
+    is_ok, reason = validate_terabox_credentials()
+    if not is_ok:
+        await cancelTask(f"Terabox Credentials Error: {reason}")
+        return
+
+    await downloadManager(source, is_ytdl)
+
+    Transfer.total_down_size = getSize(Paths.down_path)
+
+    applyCustomName()
+
+    try:
+        await upload_to_terabox(Paths.down_path, Paths.TERABOX_FOLDER)
+    except Exception as e:
+        await cancelTask(f"Terabox Upload Error: {str(e)}")
+        return
+
+    await Leech(Paths.down_path, True)
+
+    await SendLogs(True)
 
 
 async def Do_Leech(source, is_dir, is_ytdl, is_zip, is_unzip, is_dualzip):
