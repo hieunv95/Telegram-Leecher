@@ -11,6 +11,8 @@ from os import path as ospath
 from urllib.parse import urlencode
 from colab_leecher.utility.variables import Paths
 
+TERABOX_CHUNK_SIZE = 4 * 1024 * 1024
+
 
 def _normalize_remote_dir(remote_dir: str):
     if not remote_dir:
@@ -71,15 +73,43 @@ def _api_common(dp_logid: str):
     return common
 
 
-def _upload_single_file(file_path: str, remote_dir: str):
+def _compute_block_list(file_path: str):
+    block_list = []
+    with open(file_path, "rb") as file_buffer:
+        while True:
+            chunk = file_buffer.read(TERABOX_CHUNK_SIZE)
+            if not chunk:
+                break
+            block_list.append(hashlib.md5(chunk).hexdigest())
+    return block_list
+
+
+def _response_json(response, error_prefix: str):
+    try:
+        payload = response.json()
+    except Exception as exc:
+        raise RuntimeError(f"{error_prefix}: invalid response: {exc}") from exc
+
+    if payload.get("errno") not in [0, None]:
+        raise RuntimeError(f"{error_prefix}: {payload.get('errmsg', 'Unknown error')}")
+
+    return payload
+
+
+def _upload_single_file(
+    file_path: str,
+    remote_dir: str,
+    progress_callback=None,
+    file_index: int = 1,
+    total_files: int = 1,
+):
     if not ospath.exists(file_path) or not ospath.isfile(file_path):
         raise RuntimeError(f"Missing file for Terabox upload: {file_path}")
 
     file_name = ospath.basename(file_path)
     file_size = ospath.getsize(file_path)
     local_mtime = int(ospath.getmtime(file_path))
-    with open(file_path, "rb") as file_buffer:
-        file_md5 = hashlib.md5(file_buffer.read()).hexdigest()
+    block_list = _compute_block_list(file_path)
 
     dp_logid = _dp_logid()
     common = _api_common(dp_logid)
@@ -90,85 +120,102 @@ def _upload_single_file(file_path: str, remote_dir: str):
         "path": remote_path,
         "autoinit": 1,
         "target_path": _normalize_remote_dir(remote_dir),
-        "block_list": json.dumps([file_md5]),
+        "block_list": json.dumps(block_list),
         "size": file_size,
         "local_mtime": local_mtime,
         **common,
     }
 
-    precreate_res = requests.post(
-        precreate_url,
-        headers=_request_headers(content_type=True),
-        data=urlencode(precreate_data),
-        timeout=180,
-    )
-    precreate_res.raise_for_status()
-    precreate_json = precreate_res.json()
-    if precreate_json.get("errno") != 0:
-        raise RuntimeError(
-            f"Terabox precreate failed: {precreate_json.get('errmsg', 'Unknown error')}"
+    with requests.Session() as session:
+        precreate_res = session.post(
+            precreate_url,
+            headers=_request_headers(content_type=True),
+            data=urlencode(precreate_data),
+            timeout=180,
         )
+        precreate_json = _response_json(precreate_res, "Terabox precreate failed")
 
-    uploadid = precreate_json.get("uploadid")
-    if not uploadid:
-        raise RuntimeError("Terabox precreate failed: missing uploadid")
+        uploadid = precreate_json.get("uploadid")
+        if not uploadid:
+            raise RuntimeError("Terabox precreate failed: missing uploadid")
 
-    upload_url = "https://c-all.terabox.com/rest/2.0/pcs/superfile2"
-    upload_params = {
-        "method": "upload",
-        "app_id": Paths.TERABOX_APP_ID,
-        "channel": "dubox",
-        "clienttype": "0",
-        "web": "1",
-        "path": remote_path,
-        "uploadid": uploadid,
-        "uploadsign": "0",
-        "partseq": 0,
-    }
-    if Paths.TERABOX_BDSTOKEN:
-        upload_params["bdstoken"] = Paths.TERABOX_BDSTOKEN
+        upload_url = "https://c-all.terabox.com/rest/2.0/pcs/superfile2"
+        upload_headers = _request_headers(content_type=False)
+        if "Content-Type" in upload_headers:
+            upload_headers.pop("Content-Type", None)
 
-    with open(file_path, "rb") as upload_buffer:
-        upload_res = requests.post(
-            upload_url,
-            headers=_request_headers(content_type=False),
-            params=upload_params,
-            files={"file": ("blob", upload_buffer)},
-            timeout=3600,
+        with open(file_path, "rb") as upload_buffer:
+            partseq = 0
+            while True:
+                chunk = upload_buffer.read(TERABOX_CHUNK_SIZE)
+                if not chunk:
+                    break
+
+                upload_params = {
+                    "method": "upload",
+                    "app_id": Paths.TERABOX_APP_ID,
+                    "channel": "dubox",
+                    "clienttype": "0",
+                    "web": "1",
+                    "path": remote_path,
+                    "uploadid": uploadid,
+                    "uploadsign": "0",
+                    "partseq": partseq,
+                }
+                if Paths.TERABOX_BDSTOKEN:
+                    upload_params["bdstoken"] = Paths.TERABOX_BDSTOKEN
+
+                upload_res = session.post(
+                    upload_url,
+                    headers=upload_headers,
+                    params=upload_params,
+                    files={"file": ("blob", chunk)},
+                    timeout=3600,
+                )
+                _response_json(upload_res, f"Terabox chunk {partseq} upload failed")
+                logging.info(
+                    "Terabox chunk uploaded: %s part %s of %s",
+                    file_name,
+                    partseq + 1,
+                    len(block_list),
+                )
+                if progress_callback:
+                    try:
+                        progress_callback(
+                            {
+                                "file_name": file_name,
+                                "file_index": file_index,
+                                "total_files": total_files,
+                                "partseq": partseq + 1,
+                                "total_parts": len(block_list),
+                                "remote_path": remote_path,
+                                "size": file_size,
+                            }
+                        )
+                    except Exception as callback_error:
+                        logging.info("Terabox progress callback failed: %s", callback_error)
+                partseq += 1
+
+        create_url = "https://www.1024terabox.com/api/create"
+        create_data = {
+            "path": remote_path,
+            "size": file_size,
+            "uploadid": uploadid,
+            "target_path": _normalize_remote_dir(remote_dir),
+            "block_list": json.dumps(block_list),
+            "local_mtime": local_mtime,
+            "isdir": "0",
+            "rtype": "1",
+            **common,
+        }
+
+        create_res = session.post(
+            create_url,
+            headers=_request_headers(content_type=True),
+            data=urlencode(create_data),
+            timeout=180,
         )
-
-    upload_res.raise_for_status()
-    upload_json = upload_res.json()
-    if upload_json.get("errno") not in [0, None]:
-        raise RuntimeError(
-            f"Terabox upload failed: {upload_json.get('errmsg', 'Unknown error')}"
-        )
-
-    create_url = "https://www.1024terabox.com/api/create"
-    create_data = {
-        "path": remote_path,
-        "size": file_size,
-        "uploadid": uploadid,
-        "target_path": _normalize_remote_dir(remote_dir),
-        "block_list": json.dumps([file_md5]),
-        "local_mtime": local_mtime,
-        "isdir": "0",
-        "rtype": "1",
-        **common,
-    }
-
-    create_res = requests.post(
-        create_url,
-        headers=_request_headers(content_type=True),
-        data=urlencode(create_data),
-        timeout=180,
-    )
-    create_res.raise_for_status()
-    create_json = create_res.json()
-    if create_json.get("errno") != 0:
-        raise RuntimeError(
-            f"Terabox create failed: {create_json.get('errmsg', 'Unknown error')}"
-        )
+        create_json = _response_json(create_res, "Terabox create failed")
 
     return {
         "file_name": file_name,
@@ -177,7 +224,7 @@ def _upload_single_file(file_path: str, remote_dir: str):
     }
 
 
-async def upload_to_terabox(local_path: str, remote_dir: str = ""):
+async def upload_to_terabox(local_path: str, remote_dir: str = "", progress_callback=None):
     is_ok, reason = validate_terabox_credentials()
     if not is_ok:
         raise RuntimeError(reason)
@@ -186,9 +233,17 @@ async def upload_to_terabox(local_path: str, remote_dir: str = ""):
     upload_results = []
 
     if ospath.isfile(local_path):
-        uploaded = await to_thread(_upload_single_file, local_path, target_remote_dir)
+        uploaded = await to_thread(
+            _upload_single_file,
+            local_path,
+            target_remote_dir,
+            progress_callback,
+            1,
+            1,
+        )
         upload_results.append(uploaded)
     elif ospath.isdir(local_path):
+        file_entries = []
         for root, _, files in os.walk(local_path):
             relative = ospath.relpath(root, local_path)
             if relative == ".":
@@ -199,17 +254,28 @@ async def upload_to_terabox(local_path: str, remote_dir: str = ""):
 
             for file_name in sorted(files):
                 file_path = ospath.join(root, file_name)
-                uploaded = await to_thread(_upload_single_file, file_path, file_remote_dir)
-                upload_results.append(uploaded)
+                file_entries.append((file_path, file_remote_dir))
+
+        total_files = len(file_entries)
+        for file_index, (file_path, file_remote_dir) in enumerate(file_entries, start=1):
+            uploaded = await to_thread(
+                _upload_single_file,
+                file_path,
+                file_remote_dir,
+                progress_callback,
+                file_index,
+                total_files,
+            )
+            upload_results.append(uploaded)
     else:
         raise RuntimeError(f"Upload source not found: {local_path}")
 
     total_size = sum(item.get("size", 0) for item in upload_results)
     logging.info(
-        "Terabox upload complete: %s files, %s bytes in %ss",
+        "Terabox upload complete: %s files, %s bytes at %s",
         len(upload_results),
         total_size,
-        int(time()),
+        time(),
     )
 
     return upload_results

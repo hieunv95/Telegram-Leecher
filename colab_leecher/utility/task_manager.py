@@ -2,6 +2,7 @@
 
 
 import pytz
+import asyncio
 import shutil
 import logging
 from time import time
@@ -187,6 +188,47 @@ async def taskScheduler():
         await Do_Leech(BOT.SOURCE, is_dir, BOT.Mode.ytdl, is_zip, is_unzip, is_dualzip)
 
 
+def _terabox_progress_callback(loop, status_message):
+    last_emit = [0.0]
+
+    def _callback(progress_info):
+        file_name = progress_info.get("file_name", "Unknown file")
+        file_index = progress_info.get("file_index", 1)
+        total_files = progress_info.get("total_files", 1)
+        partseq = progress_info.get("partseq", 0)
+        total_parts = progress_info.get("total_parts", 0)
+        remote_path = progress_info.get("remote_path", "")
+
+        now = time()
+        if partseq not in (1, total_parts) and now - last_emit[0] < 5:
+            return
+        last_emit[0] = now
+
+        text = (
+            Messages.task_msg
+            + f"<b>⬆️ UPLOADING TO TERABOX » </b>\n"
+            + f"<code>{file_name}</code>\n"
+            + f"<b>File:</b> {file_index}/{total_files} | <b>Chunk:</b> {partseq}/{total_parts}\n"
+            + f"<code>{remote_path}</code>"
+            + sysINFO()
+        )
+
+        future = asyncio.run_coroutine_threadsafe(
+            status_message.edit_text(text=text, reply_markup=keyboard()),
+            loop,
+        )
+
+        def _log_future_result(done_future):
+            try:
+                done_future.result()
+            except Exception as error:
+                logging.info(f"Terabox progress edit failed: {error}")
+
+        future.add_done_callback(_log_future_result)
+
+    return _callback
+
+
 async def Do_Terabox_Mirror(source, is_ytdl):
     is_ok, reason = validate_terabox_credentials()
     if not is_ok:
@@ -199,8 +241,25 @@ async def Do_Terabox_Mirror(source, is_ytdl):
 
     applyCustomName()
 
+    Messages.status_head = f"<b>⬆️ UPLOADING TO TERABOX » </b>\n"
     try:
-        await upload_to_terabox(Paths.down_path, Paths.TERABOX_FOLDER)
+        await MSG.status_msg.edit_text(
+            text=Messages.task_msg
+            + Messages.status_head
+            + f"\n⏳ __Starting.....__"
+            + sysINFO(),
+            reply_markup=keyboard(),
+        )
+    except Exception as e:
+        logging.info(f"Error updating Terabox status bar: {e}")
+
+    try:
+        loop = asyncio.get_running_loop()
+        await upload_to_terabox(
+            Paths.down_path,
+            Paths.TERABOX_FOLDER,
+            progress_callback=_terabox_progress_callback(loop, MSG.status_msg),
+        )
     except Exception as e:
         await cancelTask(f"Terabox Upload Error: {str(e)}")
         return
@@ -220,8 +279,25 @@ async def Do_Terabox_Mirror_Leech(source, is_ytdl):
 
     applyCustomName()
 
+    Messages.status_head = f"<b>⬆️ UPLOADING TO TERABOX » </b>\n"
     try:
-        await upload_to_terabox(Paths.down_path, Paths.TERABOX_FOLDER)
+        await MSG.status_msg.edit_text(
+            text=Messages.task_msg
+            + Messages.status_head
+            + f"\n⏳ __Starting.....__"
+            + sysINFO(),
+            reply_markup=keyboard(),
+        )
+    except Exception as e:
+        logging.info(f"Error updating Terabox status bar: {e}")
+
+    try:
+        loop = asyncio.get_running_loop()
+        await upload_to_terabox(
+            Paths.down_path,
+            Paths.TERABOX_FOLDER,
+            progress_callback=_terabox_progress_callback(loop, MSG.status_msg),
+        )
     except Exception as e:
         await cancelTask(f"Terabox Upload Error: {str(e)}")
         return
