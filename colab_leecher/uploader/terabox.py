@@ -164,12 +164,12 @@ def _upload_chunk(session, upload_url: str, chunk: bytes, expected_md: str, part
         timeout=3600,
     )
     upload_json = _response_json(upload_res, f"Terabox chunk {partseq} upload failed")
-    uploaded_md = upload_json.get("md")
+    uploaded_md = upload_json.get("md5")
     if not uploaded_md:
-        raise RuntimeError(f"Terabox chunk {partseq} upload failed: missing md")
+        raise RuntimeError(f"Terabox chunk {partseq} upload failed: missing md5")
     if uploaded_md.lower() != expected_md.lower():
         raise RuntimeError(
-            f"Terabox chunk {partseq} upload failed: md mismatch for {file_name}"
+            f"Terabox chunk {partseq} upload failed: md5 mismatch for {file_name}"
         )
     return uploaded_md
 
