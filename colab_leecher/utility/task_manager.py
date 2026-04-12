@@ -213,18 +213,30 @@ def _terabox_progress_callback(loop, status_message):
             + sysINFO()
         )
 
-        future = asyncio.run_coroutine_threadsafe(
-            status_message.edit_text(text=text, reply_markup=keyboard()),
-            loop,
-        )
-
         def _log_future_result(done_future):
             try:
-                done_future.result()
+                # Don't call result() immediately; check status first
+                if not done_future.done():
+                    return
+                # Only retrieve result if no exception occurred
+                if done_future.exception() is not None:
+                    logging.debug(f"Terabox progress update skipped: {done_future.exception()}")
+            except (asyncio.InvalidStateError, asyncio.CancelledError):
+                # Ignore state errors and cancellations
+                pass
             except Exception as error:
-                logging.info(f"Terabox progress edit failed: {error}")
+                # Silently ignore other exceptions
+                logging.debug(f"Terabox progress callback error: {type(error).__name__}")
 
-        future.add_done_callback(_log_future_result)
+        try:
+            future = asyncio.run_coroutine_threadsafe(
+                status_message.edit_text(text=text, reply_markup=keyboard()),
+                loop,
+            )
+            future.add_done_callback(_log_future_result)
+        except RuntimeError:
+            # Loop is closed or invalid, silently skip this update
+            logging.debug("Terabox progress callback: event loop unavailable")
 
     return _callback
 
