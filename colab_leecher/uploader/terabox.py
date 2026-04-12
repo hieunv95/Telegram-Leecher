@@ -124,7 +124,7 @@ def _compute_block_list(file_path: str):
             chunk = file_buffer.read(TERABOX_CHUNK_SIZE)
             if not chunk:
                 break
-            block_list.append(hashlib.md5(chunk).hexdigest())
+            block_list.append(hashlib.md5(chunk).hexdigest().upper())
     return block_list
 
 
@@ -174,6 +174,14 @@ def _upload_single_file(
     }
     if Paths.TERABOX_BDSTOKEN:
         precreate_data["bdstoken"] = Paths.TERABOX_BDSTOKEN
+
+    logging.debug(
+        "Terabox precreate metadata: file=%s size=%s chunks=%s first_chunk_md5=%s",
+        file_name,
+        file_size,
+        len(block_list),
+        (block_list[0][:12] if block_list else "none"),
+    )
 
     with requests.Session() as session:
         precreate_res = session.post(
@@ -255,6 +263,14 @@ def _upload_single_file(
         }
         if Paths.TERABOX_BDSTOKEN:
             create_data["bdstoken"] = Paths.TERABOX_BDSTOKEN
+
+        logging.debug(
+            "Terabox create metadata: file=%s size=%s chunks=%s uploadid=%s",
+            file_name,
+            file_size,
+            len(block_list),
+            uploadid,
+        )
 
         create_res = session.post(
             create_url,
