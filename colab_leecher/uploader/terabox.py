@@ -75,7 +75,7 @@ def _api_common(dp_logid: str):
 
 def build_precreate_url(app_id: str, js_token: str, dp_logid: str):
     return (
-        "https://www.1024terabox.com/api/precreate"
+        "https://dm.terabox.com/api/precreate"
         f"?app_id={app_id}&web=1&channel=dubox&clienttype=0"
         f"&jsToken={js_token}&dp-logid={dp_logid}"
     )
@@ -92,7 +92,7 @@ def build_upload_url(path_value: str, upload_id: str, app_id: str, partseq: int)
 
 def build_create_url(app_id: str, js_token: str, dp_logid: str):
     return (
-        "https://www.1024terabox.com/api/create"
+        "https://dm.terabox.com/api/create"
         f"?app_id={app_id}&web=1&channel=dubox&clienttype=0"
         f"&jsToken={js_token}&dp-logid={dp_logid}"
     )
@@ -101,7 +101,7 @@ def build_create_url(app_id: str, js_token: str, dp_logid: str):
 def build_list_url(app_id: str, directory: str, js_token: str, dp_logid: str):
     encoded_directory = quote(directory, safe="")
     return (
-        "https://www.1024terabox.com/api/list"
+        "https://dm.terabox.com/api/list"
         f"?app_id={app_id}&web=1&channel=dubox&clienttype=0"
         f"&jsToken={js_token}&dp-logid={dp_logid}&order=time&desc=1"
         f"&dir={encoded_directory}&num=100&page=1&showempty=0"
@@ -111,7 +111,7 @@ def build_list_url(app_id: str, directory: str, js_token: str, dp_logid: str):
 def build_video_download_url(app_id: str, video_path: str):
     encoded_path = quote(video_path, safe="")
     return (
-        "https://www.1024terabox.com/api/streaming"
+        "https://dm.terabox.com/api/streaming"
         f"?path={encoded_path}&app_id={app_id}&clienttype=0"
         "&type=M3U8_FLV_264_480&vip=1"
     )
