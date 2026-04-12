@@ -84,7 +84,7 @@ def build_precreate_url(app_id: str, js_token: str, dp_logid: str):
 def build_upload_url(path_value: str, upload_id: str, app_id: str, partseq: int):
     encoded_path = quote(path_value, safe="")
     return (
-        "https://c-jp.1024terabox.com/rest/2.0/pcs/superfile2"
+        "https://c-all.terabox.com/rest/2.0/pcs/superfile2"
         f"?method=upload&app_id={app_id}&channel=dubox&clienttype=0&web=1"
         f"&path={encoded_path}&uploadid={upload_id}&uploadsign=0&partseq={partseq}"
     )
