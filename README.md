@@ -112,6 +112,8 @@ Optional:
 - `TERABOX_BDSTOKEN`
 - `TERABOX_DP_LOGID`
 - `TERABOX_APP_ID` (default: `250528`)
+- `DISABLE_LOG` (`true/false`, default: `false`) to disable all runtime logs
+- `DEBUG_MODE` (`true/false`, default: `false`) to enable debug logs when logs are not disabled
 
 <br>
 

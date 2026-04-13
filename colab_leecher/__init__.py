@@ -21,7 +21,17 @@ OWNER = credentials["USER_ID"]
 DUMP_ID = credentials["DUMP_ID"]
 
 
-logging.basicConfig(level=logging.INFO)
+def _is_truthy(value: str) -> bool:
+    return value.strip().lower() in {"1", "true", "yes", "on"}
+
+
+disable_log = _is_truthy(os.getenv("DISABLE_LOG", ""))
+debug_mode = _is_truthy(os.getenv("DEBUG_MODE", "")) and not disable_log
+
+if disable_log:
+    logging.disable(logging.CRITICAL)
+else:
+    logging.basicConfig(level=logging.DEBUG if debug_mode else logging.INFO)
 
 install()
 
