@@ -2,6 +2,7 @@
 
 
 import os
+import asyncio
 import shutil
 import logging
 import pathlib
@@ -199,8 +200,12 @@ async def cancelTask(Reason: str):
     text = f"#TASK_STOPPED\n\n**╭🔗 Source » **__[Here]({Messages.src_link})__\n**├🦄 Mode » **__{BOT.Mode.mode.capitalize()}__\n**├🤔 Reason » **__{Reason}__\n**╰🍃 Spent Time » **__{getTime((datetime.now() - BotTimes.start_time).seconds)}__"
     if BOT.State.task_going:
         try:
-            BOT.TASK.cancel()  # type: ignore
+            current_task = asyncio.current_task()
+            if BOT.TASK and BOT.TASK is not current_task and not BOT.TASK.done():
+                BOT.TASK.cancel()  # type: ignore
             shutil.rmtree(Paths.WORK_PATH)
+        except asyncio.CancelledError:
+            logging.warning("Task cancellation interrupted cleanup; continuing notification flow")
         except Exception as e:
             logging.error(f"Error Deleting Task Folder: {e}")
         else:
@@ -208,11 +213,14 @@ async def cancelTask(Reason: str):
         finally:
             BOT.State.task_going = False
             try:
-                await MSG.status_msg.delete()
+                await asyncio.shield(MSG.status_msg.delete())
+            except asyncio.CancelledError:
+                logging.warning("Status message delete was cancelled")
             except Exception as e:
                 logging.error(f"Error Deleting Status Message: {e}")
             try:
-                await colab_bot.send_message(
+                await asyncio.shield(
+                    colab_bot.send_message(
                     chat_id=OWNER,
                     text=text,
                     reply_markup=InlineKeyboardMarkup(
@@ -230,6 +238,9 @@ async def cancelTask(Reason: str):
                         ]
                     ),
                 )
+                )
+            except asyncio.CancelledError:
+                logging.warning("Task stopped message send was cancelled")
             except Exception as e:
                 logging.error(f"Error Sending Task Stopped Message: {e}")
 
