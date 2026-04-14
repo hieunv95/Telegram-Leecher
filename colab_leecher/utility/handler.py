@@ -207,25 +207,31 @@ async def cancelTask(Reason: str):
             logging.info(f"On-Going Task Cancelled !")
         finally:
             BOT.State.task_going = False
-            await MSG.status_msg.delete()
-            await colab_bot.send_message(
-                chat_id=OWNER,
-                text=text,
-                reply_markup=InlineKeyboardMarkup(
-                    [
+            try:
+                await MSG.status_msg.delete()
+            except Exception as e:
+                logging.error(f"Error Deleting Status Message: {e}")
+            try:
+                await colab_bot.send_message(
+                    chat_id=OWNER,
+                    text=text,
+                    reply_markup=InlineKeyboardMarkup(
                         [
-                            InlineKeyboardButton(  # Opens a web URL
-                                "Channel 📣",
-                                url="https://t.me/Colab_Leecher",
-                            ),
-                            InlineKeyboardButton(  # Opens a web URL
-                                "Group 💬",
-                                url="https://t.me/Colab_Leecher_Discuss",
-                            ),
-                        ],
-                    ]
-                ),
-            )
+                            [
+                                InlineKeyboardButton(  # Opens a web URL
+                                    "Channel 📣",
+                                    url="https://t.me/Colab_Leecher",
+                                ),
+                                InlineKeyboardButton(  # Opens a web URL
+                                    "Group 💬",
+                                    url="https://t.me/Colab_Leecher_Discuss",
+                                ),
+                            ],
+                        ]
+                    ),
+                )
+            except Exception as e:
+                logging.error(f"Error Sending Task Stopped Message: {e}")
 
 
 async def SendLogs(is_leech: bool):

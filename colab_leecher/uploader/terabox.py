@@ -250,7 +250,7 @@ def precheck_terabox_upload_session(remote_dir: str = ""):
             "expired": True,
             "errno": errno,
             "errmsg": errmsg,
-            "reason": f"Terabox verification required (errno={errno}, errmsg={errmsg})",
+            "reason": f"Terabox jsToken needs verification (errno={errno}, errmsg={errmsg})",
         }
 
     if errno not in [0, None]:
