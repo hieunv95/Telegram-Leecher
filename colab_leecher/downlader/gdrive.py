@@ -29,16 +29,17 @@ async def build_service():
         )
 
 
-async def g_DownLoad(link, num):
+async def g_DownLoad(link, num, down_path: str | None = None):
     global start_time, down_msg
     down_msg = f"<b>📥 DOWNLOADING FROM » </b><i>🔗Link {str(num).zfill(2)}</i>\n\n<b>🏷️ Name » </b><code>{Messages.download_name}</code>\n"
+    target_down_path = down_path or Paths.down_path
     file_id = await getIDFromURL(link)
     meta = getFileMetadata(file_id)
 
     if meta.get("mimeType") == "application/vnd.google-apps.folder":
-        await gDownloadFolder(file_id, Paths.down_path)
+        await gDownloadFolder(file_id, target_down_path)
     else:
-        await gDownloadFile(file_id, Paths.down_path)
+        await gDownloadFile(file_id, target_down_path)
 
 
 async def getIDFromURL(link: str):

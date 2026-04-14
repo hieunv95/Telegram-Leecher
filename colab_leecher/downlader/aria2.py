@@ -9,13 +9,14 @@ from colab_leecher.utility.helper import sizeUnit, status_bar
 from colab_leecher.utility.variables import BOT, Aria2c, Paths, Messages, BotTimes
 
 
-async def aria2_Download(link: str, num: int):
+async def aria2_Download(link: str, num: int, down_path: str | None = None):
     global BotTimes, Messages
     name_d = get_Aria2c_Name(link)
     BotTimes.task_start = datetime.now()
     Messages.status_head = f"<b>📥 DOWNLOADING FROM » </b><i>🔗Link {str(num).zfill(2)}</i>\n\n<b>🏷️ Name » </b><code>{name_d}</code>\n"
 
     # Create a command to run aria2p with the link
+    target_down_path = down_path or Paths.down_path
     command = [
         "aria2c",
         "-x16",
@@ -24,7 +25,7 @@ async def aria2_Download(link: str, num: int):
         "--max-tries=3",
         "--console-log-level=notice",
         "-d",
-        Paths.down_path,
+        target_down_path,
         link,
     ]
 

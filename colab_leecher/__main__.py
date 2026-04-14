@@ -44,6 +44,84 @@ def _is_direct_http_url(link: str):
     return True
 
 
+def _extract_sources_and_options(lines):
+    global BOT
+    temp_source = [line.strip() for line in lines if line and line.strip()]
+    if not temp_source:
+        return []
+
+    for _ in range(3):
+        if not temp_source:
+            break
+        last = temp_source[-1]
+        if last[0] == "[":
+            BOT.Options.custom_name = last[1:-1]
+            temp_source.pop()
+        elif last[0] == "{":
+            BOT.Options.zip_pswd = last[1:-1]
+            temp_source.pop()
+        elif last[0] == "(":
+            BOT.Options.unzip_pswd = last[1:-1]
+            temp_source.pop()
+        else:
+            break
+
+    return temp_source
+
+
+async def _start_task_for_sources(message, temp_source):
+    global BOT, MSG
+    if not temp_source:
+        await message.reply_text("<b>❌ No valid URLs found.</b>", quote=True)
+        return
+
+    BOT.SOURCE = temp_source
+
+    if BOT.Mode.mode in ["terabox-mirror", "terabox-mirror-leech"]:
+        invalid_links = [link for link in BOT.SOURCE if not _is_direct_http_url(link)]
+        if invalid_links:
+            await message.reply_text(
+                "<b>❌ Invalid source for Terabox mode.</b>\n\nPlease send only direct HTTP/HTTPS download link(s).\nGoogle Drive, Telegram, Mega, TeraBox and magnet links are not allowed in /tbupload or /ttupload.",
+                quote=True,
+            )
+            return
+
+        BOT.Mode.type = "normal"
+        MSG.status_msg = await colab_bot.send_message(
+            chat_id=OWNER,
+            text="#STARTING_TASK\n\n**Starting your task in a few Seconds...🦐**",
+            reply_markup=InlineKeyboardMarkup(
+                [
+                    [InlineKeyboardButton("Cancel ❌", callback_data="cancel")],
+                ]
+            ),
+        )
+        BOT.State.task_going = True
+        BOT.State.started = False
+        BotTimes.start_time = datetime.now()
+        event_loop = get_event_loop()
+        BOT.TASK = event_loop.create_task(taskScheduler())  # type: ignore
+        await BOT.TASK
+        BOT.State.task_going = False
+        return
+
+    keyboard = InlineKeyboardMarkup(
+        [
+            [InlineKeyboardButton("Regular", callback_data="normal")],
+            [
+                InlineKeyboardButton("Compress", callback_data="zip"),
+                InlineKeyboardButton("Extract", callback_data="unzip"),
+            ],
+            [InlineKeyboardButton("UnDoubleZip", callback_data="undzip")],
+        ]
+    )
+    await message.reply_text(
+        text=f"<b>🐹 Select Type of {BOT.Mode.mode.capitalize()} You Want » </b>\n\nRegular:<i> Normal file upload</i>\nCompress:<i> Zip file upload</i>\nExtract:<i> extract before upload</i>\nUnDoubleZip:<i> Unzip then compress</i>",
+        reply_markup=keyboard,
+        quote=True,
+    )
+
+
 @colab_bot.on_message(filters.command("start") & filters.private)
 async def start(client, message):
     await message.delete()
@@ -184,72 +262,46 @@ async def handle_url(client, message):
     if src_request_msg:
         await src_request_msg.delete()
     if BOT.State.task_going == False and BOT.State.started:
-        temp_source = message.text.splitlines()
-
-        # Check for arguments in message
-        for _ in range(3):
-            if temp_source[-1][0] == "[":
-                BOT.Options.custom_name = temp_source[-1][1:-1]
-                temp_source.pop()
-            elif temp_source[-1][0] == "{":
-                BOT.Options.zip_pswd = temp_source[-1][1:-1]
-                temp_source.pop()
-            elif temp_source[-1][0] == "(":
-                BOT.Options.unzip_pswd = temp_source[-1][1:-1]
-                temp_source.pop()
-            else:
-                break
-
-        BOT.SOURCE = temp_source
-
-        if BOT.Mode.mode in ["terabox-mirror", "terabox-mirror-leech"]:
-            invalid_links = [link for link in BOT.SOURCE if not _is_direct_http_url(link)]
-            if invalid_links:
-                await message.reply_text(
-                    "<b>❌ Invalid source for Terabox mode.</b>\n\nPlease send only direct HTTP/HTTPS download link(s).\nGoogle Drive, Telegram, Mega, TeraBox and magnet links are not allowed in /tbupload or /ttupload.",
-                    quote=True,
-                )
-                return
-            
-            BOT.Mode.type = "normal"
-            MSG.status_msg = await colab_bot.send_message(
-                chat_id=OWNER,
-                text="#STARTING_TASK\n\n**Starting your task in a few Seconds...🦐**",
-                reply_markup=InlineKeyboardMarkup(
-                    [
-                        [InlineKeyboardButton("Cancel ❌", callback_data="cancel")],
-                    ]
-                ),
-            )
-            BOT.State.task_going = True
-            BOT.State.started = False
-            BotTimes.start_time = datetime.now()
-            event_loop = get_event_loop()
-            BOT.TASK = event_loop.create_task(taskScheduler())  # type: ignore
-            await BOT.TASK
-            BOT.State.task_going = False
-            return
-
-        keyboard = InlineKeyboardMarkup(
-            [
-                [InlineKeyboardButton("Regular", callback_data="normal")],
-                [
-                    InlineKeyboardButton("Compress", callback_data="zip"),
-                    InlineKeyboardButton("Extract", callback_data="unzip"),
-                ],
-                [InlineKeyboardButton("UnDoubleZip", callback_data="undzip")],
-            ]
-        )
-        await message.reply_text(
-            text=f"<b>🐹 Select Type of {BOT.Mode.mode.capitalize()} You Want » </b>\n\nRegular:<i> Normal file upload</i>\nCompress:<i> Zip file upload</i>\nExtract:<i> extract before upload</i>\nUnDoubleZip:<i> Unzip then compress</i>",
-            reply_markup=keyboard,
-            quote=True,
-        )
+        temp_source = _extract_sources_and_options(message.text.splitlines())
+        await _start_task_for_sources(message, temp_source)
     elif BOT.State.started:
         await message.delete()
         await message.reply_text(
             "<i>I am Already Working ! Please Wait Until I finish 😣!!</i>"
         )
+
+
+@colab_bot.on_message(filters.document & filters.private)
+async def handle_url_file(client, message):
+    global BOT
+
+    if BOT.State.task_going or not BOT.State.started:
+        return
+
+    doc = message.document
+    if doc is None or not doc.file_name or not doc.file_name.lower().endswith(".txt"):
+        return
+
+    file_path = None
+    try:
+        file_path = await message.download(file_name=f"/tmp/leecher_urls_{message.id}.txt")
+        with open(file_path, "r", encoding="utf-8", errors="ignore") as file:
+            lines = file.read().splitlines()
+
+        BOT.Options.custom_name = ""
+        BOT.Options.zip_pswd = ""
+        BOT.Options.unzip_pswd = ""
+        temp_source = _extract_sources_and_options(lines)
+        await _start_task_for_sources(message, temp_source)
+    except Exception as error:
+        logging.error(f"Failed to read URL file: {error}")
+        await message.reply_text(
+            f"<b>❌ Failed to read URL file.</b>\n<code>{str(error)}</code>",
+            quote=True,
+        )
+    finally:
+        if file_path and os.path.exists(file_path):
+            os.remove(file_path)
 
 
 @colab_bot.on_callback_query()

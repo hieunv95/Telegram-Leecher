@@ -279,6 +279,116 @@ def _terabox_progress_callback(loop, status_message):
     return _callback
 
 
+async def _run_streaming_transfer_pipeline(
+    source,
+    is_ytdl: bool,
+    upload_telegram: bool,
+    upload_terabox: bool,
+):
+    source_queue = asyncio.Queue()
+    queue_stop = object()
+    downloaded_dirs = []
+    terabox_tasks = []
+    terabox_semaphore = asyncio.Semaphore(4)
+
+    async def _on_source_complete(item):
+        await source_queue.put(item)
+
+    async def _producer():
+        try:
+            ok = await downloadManager(
+                source,
+                is_ytdl,
+                on_source_complete=_on_source_complete,
+                concurrent=True,
+            )
+            if not ok:
+                raise RuntimeError("Download stage failed")
+        finally:
+            await source_queue.put(queue_stop)
+
+    async def _upload_source_to_terabox(source_dir: str, source_url: str, source_index: int):
+        async with terabox_semaphore:
+            try:
+                await upload_to_terabox(source_dir, Paths.TERABOX_FOLDER)
+            except Exception as error:
+                raise RuntimeError(
+                    f"Terabox upload failed\nURL: {source_url}\nSource: {source_index}\nFile: {source_dir}\nError: {str(error)}"
+                )
+
+    producer_task = asyncio.create_task(_producer())
+
+    try:
+        while True:
+            for pending_terabox in list(terabox_tasks):
+                if pending_terabox.done() and pending_terabox.exception() is not None:
+                    raise pending_terabox.exception()  # type: ignore
+
+            item = await source_queue.get()
+            if item is queue_stop:
+                break
+
+            source_dir = item.get("download_dir")
+            source_url = item.get("source_url")
+            source_index = item.get("source_index")
+
+            if source_dir and ospath.exists(source_dir):
+                downloaded_dirs.append(source_dir)
+
+            if upload_terabox and source_dir:
+                terabox_tasks.append(
+                    asyncio.create_task(
+                        _upload_source_to_terabox(source_dir, source_url, source_index)
+                    )
+                )
+
+            if upload_telegram and source_dir:
+                try:
+                    await Leech(source_dir, not upload_terabox)
+                except Exception as error:
+                    latest_file = Messages.download_name or source_dir
+                    raise RuntimeError(
+                        f"Telegram upload failed\nURL: {source_url}\nSource: {source_index}\nFile: {latest_file}\nError: {str(error)}"
+                    )
+
+        await producer_task
+
+        if terabox_tasks:
+            done, pending = await asyncio.wait(
+                set(terabox_tasks), return_when=asyncio.FIRST_EXCEPTION
+            )
+            first_error = None
+            for completed in done:
+                if completed.exception() is not None:
+                    first_error = completed.exception()
+                    break
+
+            if first_error is not None:
+                for pending_task in pending:
+                    pending_task.cancel()
+                if pending:
+                    await asyncio.gather(*pending, return_exceptions=True)
+                raise first_error
+
+            if pending:
+                await asyncio.gather(*pending)
+
+    except Exception:
+        if not producer_task.done():
+            producer_task.cancel()
+            await asyncio.gather(producer_task, return_exceptions=True)
+        for pending_terabox in terabox_tasks:
+            if not pending_terabox.done():
+                pending_terabox.cancel()
+        await asyncio.gather(*terabox_tasks, return_exceptions=True)
+        raise
+    finally:
+        if upload_terabox:
+            for source_dir in downloaded_dirs:
+                if ospath.exists(source_dir):
+                    shutil.rmtree(source_dir)
+
+
 async def Do_Terabox_Mirror(source, is_ytdl):
     is_ok, reason = validate_terabox_credentials()
     if not is_ok:
@@ -293,30 +403,12 @@ async def Do_Terabox_Mirror(source, is_ytdl):
         await cancelTask(f"Terabox Precheck Error: {precheck_result.get('reason')}")
         return
 
-    await downloadManager(source, is_ytdl)
-
-    Transfer.total_down_size = getSize(Paths.down_path)
-
-    applyCustomName()
-
-    Messages.status_head = f"<b>⬆️ UPLOADING TO TERABOX » </b>\n"
     try:
-        await safe_edit_status(
-            text=Messages.task_msg
-            + Messages.status_head
-            + f"\n⏳ __Starting.....__"
-            + sysINFO(),
-            reply_markup=keyboard(),
-        )
-    except Exception as e:
-        logging.info(f"Error updating Terabox status bar: {e}")
-
-    try:
-        loop = asyncio.get_running_loop()
-        await upload_to_terabox(
-            Paths.down_path,
-            Paths.TERABOX_FOLDER,
-            progress_callback=_terabox_progress_callback(loop, MSG.status_msg),
+        await _run_streaming_transfer_pipeline(
+            source,
+            is_ytdl,
+            upload_telegram=False,
+            upload_terabox=True,
         )
     except Exception as e:
         await cancelTask(f"Terabox Upload Error: {str(e)}")
@@ -339,58 +431,16 @@ async def Do_Terabox_Mirror_Leech(source, is_ytdl):
         await cancelTask(f"Terabox Precheck Error: {precheck_result.get('reason')}")
         return
 
-    await downloadManager(source, is_ytdl)
-
-    Transfer.total_down_size = getSize(Paths.down_path)
-
-    applyCustomName()
-
-    Messages.status_head = f"<b>⬆️ UPLOADING TO TERABOX » </b>\n"
     try:
-        await safe_edit_status(
-            text=Messages.task_msg
-            + Messages.status_head
-            + f"\n⏳ __Starting.....__"
-            + sysINFO(),
-            reply_markup=keyboard(),
+        await _run_streaming_transfer_pipeline(
+            source,
+            is_ytdl,
+            upload_telegram=True,
+            upload_terabox=True,
         )
     except Exception as e:
-        logging.info(f"Error updating Terabox status bar: {e}")
-
-    loop = asyncio.get_running_loop()
-    terabox_task = asyncio.create_task(
-        upload_to_terabox(
-            Paths.down_path,
-            Paths.TERABOX_FOLDER,
-            progress_callback=_terabox_progress_callback(loop, MSG.status_msg),
-        )
-    )
-    telegram_task = asyncio.create_task(Leech(Paths.down_path, False))
-
-    done, pending = await asyncio.wait(
-        {terabox_task, telegram_task},
-        return_when=asyncio.FIRST_EXCEPTION,
-    )
-
-    for task in done:
-        err = task.exception()
-        if err is not None:
-            for pending_task in pending:
-                pending_task.cancel()
-            if pending:
-                await asyncio.gather(*pending, return_exceptions=True)
-
-            if task is terabox_task:
-                await cancelTask(f"Terabox Upload Error: {str(err)}")
-            else:
-                await cancelTask(f"Telegram Upload Error: {str(err)}")
-            return
-
-    if pending:
-        await asyncio.gather(*pending)
-
-    if ospath.exists(Paths.down_path):
-        shutil.rmtree(Paths.down_path)
+        await cancelTask(str(e))
+        return
 
     await SendLogs(True)
 
@@ -423,6 +473,21 @@ async def Do_Leech(source, is_dir, is_ytdl, is_zip, is_unzip, is_dualzip):
                     Messages.download_name = ospath.basename(s)
                     await Leech(Paths.temp_dirleech_path, True)
     else:
+        if not (is_zip or is_unzip or is_dualzip):
+            try:
+                await _run_streaming_transfer_pipeline(
+                    source,
+                    is_ytdl,
+                    upload_telegram=True,
+                    upload_terabox=False,
+                )
+            except Exception as e:
+                await cancelTask(str(e))
+                return
+
+            await SendLogs(True)
+            return
+
         await downloadManager(source, is_ytdl)
 
         Transfer.total_down_size = getSize(Paths.down_path)

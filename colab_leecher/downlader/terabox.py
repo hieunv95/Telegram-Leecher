@@ -7,7 +7,7 @@ from colab_leecher.utility.handler import cancelTask
 from colab_leecher.downlader.aria2 import aria2_Download
 
 
-async def terabox_download(link: str, index):
+async def terabox_download(link: str, index, down_path: str | None = None):
     global Aria2c
     payload = {"url": f"{link}"}
     headers = {
@@ -40,10 +40,10 @@ async def terabox_download(link: str, index):
                 content_type = response.headers.get("Content-Type")
                 Aria2c.link_info = False
                 if "application/octet-stream" in content_type:
-                    await aria2_Download(fast_download_url, index)
+                    await aria2_Download(fast_download_url, index, down_path)
                 else:
                     logging.info("Fast donload link is unusable")
-                    await aria2_Download(slow_download_url, index)
+                    await aria2_Download(slow_download_url, index, down_path)
             except Exception as e:
                 logging.info("Fast donload link is unusable")
-                await aria2_Download(slow_download_url, index)
+                await aria2_Download(slow_download_url, index, down_path)

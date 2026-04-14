@@ -11,12 +11,13 @@ from colab_leecher.utility.variables import YTDL, MSG, Messages, Paths
 from colab_leecher.utility.helper import getTime, keyboard, sizeUnit, status_bar, sysINFO, safe_edit_status
 
 
-async def YTDL_Status(link, num):
+async def YTDL_Status(link, num, down_path: str | None = None):
     global Messages, YTDL
     name = await get_YT_Name(link)
     Messages.status_head = f"<b>📥 DOWNLOADING FROM » </b><i>🔗Link {str(num).zfill(2)}</i>\n\n<code>{name}</code>\n"
 
-    YTDL_Thread = Thread(target=YouTubeDL, name="YouTubeDL", args=(link,))
+    target_down_path = down_path or Paths.down_path
+    YTDL_Thread = Thread(target=YouTubeDL, name="YouTubeDL", args=(link, target_down_path))
     YTDL_Thread.start()
 
     while YTDL_Thread.is_alive():  # Until ytdl is downloading
@@ -65,8 +66,9 @@ class MyLogger:
         pass
 
 
-def YouTubeDL(url):
+def YouTubeDL(url, down_path: str | None = None):
     global YTDL
+    target_down_path = down_path or Paths.down_path
 
     def my_hook(d):
         global YTDL
@@ -118,10 +120,10 @@ def YouTubeDL(url):
             YTDL.header = "⌛ __Please WAIT a bit...__"
             if "_type" in info_dict and info_dict["_type"] == "playlist":
                 playlist_name = info_dict["title"] 
-                if not ospath.exists(ospath.join(Paths.down_path, playlist_name)):
-                    makedirs(ospath.join(Paths.down_path, playlist_name))
+                if not ospath.exists(ospath.join(target_down_path, playlist_name)):
+                    makedirs(ospath.join(target_down_path, playlist_name))
                 ydl_opts["outtmpl"] = {
-                    "default": f"{Paths.down_path}/{playlist_name}/%(title)s.%(ext)s",
+                    "default": f"{target_down_path}/{playlist_name}/%(title)s.%(ext)s",
                     "thumbnail": f"{Paths.thumbnail_ytdl}/%(id)s.%(ext)s",
                 }
                 for entry in info_dict["entries"]:
@@ -131,14 +133,14 @@ def YouTubeDL(url):
                     except yt_dlp.utils.DownloadError as e:
                         if e.exc_info[0] == 36:
                             ydl_opts["outtmpl"] = {
-                                "default": f"{Paths.down_path}/%(id)s.%(ext)s",
+                                "default": f"{target_down_path}/%(id)s.%(ext)s",
                                 "thumbnail": f"{Paths.thumbnail_ytdl}/%(id)s.%(ext)s",
                             }
                             ydl.download([video_url])
             else:
                 YTDL.header = ""
                 ydl_opts["outtmpl"] = {
-                    "default": f"{Paths.down_path}/%(id)s.%(ext)s",
+                    "default": f"{target_down_path}/%(id)s.%(ext)s",
                     "thumbnail": f"{Paths.thumbnail_ytdl}/%(id)s.%(ext)s",
                 }
                 try:
@@ -146,7 +148,7 @@ def YouTubeDL(url):
                 except yt_dlp.utils.DownloadError as e:
                     if e.exc_info[0] == 36:
                         ydl_opts["outtmpl"] = {
-                            "default": f"{Paths.down_path}/%(id)s.%(ext)s",
+                            "default": f"{target_down_path}/%(id)s.%(ext)s",
                             "thumbnail": f"{Paths.thumbnail_ytdl}/%(id)s.%(ext)s",
                         }
                         ydl.download([url])
