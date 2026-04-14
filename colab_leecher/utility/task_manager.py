@@ -35,7 +35,11 @@ from colab_leecher.utility.handler import (
     SendLogs,
     cancelTask,
 )
-from colab_leecher.uploader.terabox import upload_to_terabox, validate_terabox_credentials
+from colab_leecher.uploader.terabox import (
+    upload_to_terabox,
+    validate_terabox_credentials,
+    precheck_terabox_upload_session,
+)
 from colab_leecher.utility.variables import (
     BOT,
     MSG,
@@ -281,6 +285,14 @@ async def Do_Terabox_Mirror(source, is_ytdl):
         await cancelTask(f"Terabox Credentials Error: {reason}")
         return
 
+    precheck_result = await asyncio.to_thread(
+        precheck_terabox_upload_session,
+        Paths.TERABOX_FOLDER,
+    )
+    if not precheck_result.get("ok"):
+        await cancelTask(f"Terabox Precheck Error: {precheck_result.get('reason')}")
+        return
+
     await downloadManager(source, is_ytdl)
 
     Transfer.total_down_size = getSize(Paths.down_path)
@@ -317,6 +329,14 @@ async def Do_Terabox_Mirror_Leech(source, is_ytdl):
     is_ok, reason = validate_terabox_credentials()
     if not is_ok:
         await cancelTask(f"Terabox Credentials Error: {reason}")
+        return
+
+    precheck_result = await asyncio.to_thread(
+        precheck_terabox_upload_session,
+        Paths.TERABOX_FOLDER,
+    )
+    if not precheck_result.get("ok"):
+        await cancelTask(f"Terabox Precheck Error: {precheck_result.get('reason')}")
         return
 
     await downloadManager(source, is_ytdl)

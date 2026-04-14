@@ -144,16 +144,132 @@ def _iter_file_chunks(file_path: str):
             partseq += 1
 
 
-def _response_json(response, error_prefix: str):
+def _response_json(response, error_prefix: str, raise_on_error: bool = True):
     try:
         payload = response.json()
     except Exception as exc:
+        logging.error("%s: invalid response body: %s", error_prefix, exc)
         raise RuntimeError(f"{error_prefix}: invalid response: {exc}") from exc
 
-    if payload.get("errno") not in [0, None]:
-        raise RuntimeError(f"{error_prefix}: {payload.get('errmsg', 'Unknown error')}")
+    errno = payload.get("errno")
+    errmsg = payload.get("errmsg")
+
+    if errno not in [0, None]:
+        logging.error(
+            "%s: errno=%s errmsg=%s",
+            error_prefix,
+            errno,
+            errmsg or "Unknown error",
+        )
+        if raise_on_error:
+            raise RuntimeError(
+                f"{error_prefix}: errno={errno} errmsg={errmsg or 'Unknown error'}"
+            )
+    else:
+        logging.debug("%s: errno=%s", error_prefix, errno)
 
     return payload
+
+
+def _is_need_verify_error(errno, errmsg):
+    try:
+        if int(errno) == 4000023:
+            return True
+    except Exception:
+        pass
+    return "need verify" in str(errmsg or "").lower()
+
+
+def precheck_terabox_upload_session(remote_dir: str = ""):
+    """Validate Terabox session before download/upload by probing precreate API."""
+    is_ok, reason = validate_terabox_credentials()
+    if not is_ok:
+        return {
+            "ok": False,
+            "expired": False,
+            "errno": None,
+            "errmsg": reason,
+            "reason": reason,
+        }
+
+    dp_logid = _dp_logid()
+    target_remote_dir = _normalize_remote_dir(remote_dir or Paths.TERABOX_FOLDER)
+    dummy_name = f".precheck_{''.join(choices(ascii_uppercase + digits, k=10))}.tmp"
+    dummy_path = _build_remote_path(target_remote_dir, dummy_name)
+
+    precreate_url = build_precreate_url(
+        Paths.TERABOX_APP_ID,
+        Paths.TERABOX_JS_TOKEN,
+        dp_logid,
+    )
+    precreate_data = {
+        "path": dummy_path,
+        "autoinit": 1,
+        "target_path": target_remote_dir,
+        "block_list": json.dumps([hashlib.md5(b"0").hexdigest()]),
+        "size": 1,
+        "local_mtime": int(time()),
+    }
+    if Paths.TERABOX_BDSTOKEN:
+        precreate_data["bdstoken"] = Paths.TERABOX_BDSTOKEN
+
+    try:
+        with requests.Session() as session:
+            precreate_res = session.post(
+                precreate_url,
+                headers=_request_headers(content_type=True),
+                data=urlencode(precreate_data),
+                timeout=120,
+            )
+            payload = _response_json(
+                precreate_res,
+                "Terabox precheck precreate",
+                raise_on_error=False,
+            )
+    except Exception as exc:
+        logging.error("Terabox precheck request failed: %s", exc)
+        return {
+            "ok": False,
+            "expired": False,
+            "errno": None,
+            "errmsg": str(exc),
+            "reason": f"precheck request failed: {exc}",
+        }
+
+    errno = payload.get("errno")
+    errmsg = payload.get("errmsg")
+
+    if _is_need_verify_error(errno, errmsg):
+        logging.error(
+            "Terabox jsToken verification required: errno=%s errmsg=%s",
+            errno,
+            errmsg,
+        )
+        return {
+            "ok": False,
+            "expired": True,
+            "errno": errno,
+            "errmsg": errmsg,
+            "reason": f"Terabox verification required (errno={errno}, errmsg={errmsg})",
+        }
+
+    if errno not in [0, None]:
+        return {
+            "ok": False,
+            "expired": False,
+            "errno": errno,
+            "errmsg": errmsg,
+            "reason": f"Terabox precheck failed (errno={errno}, errmsg={errmsg or 'Unknown error'})",
+        }
+
+    logging.info("Terabox precheck passed: errno=%s", errno)
+    return {
+        "ok": True,
+        "expired": False,
+        "errno": errno,
+        "errmsg": errmsg,
+        "reason": "ok",
+    }
 
 
 def _upload_chunk(session, upload_url: str, chunk: bytes, expected_md: str, partseq: int, upload_headers: dict, file_name: str):
