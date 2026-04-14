@@ -22,6 +22,7 @@ from colab_leecher.utility.variables import (
     Messages,
     Aria2c,
     BotTimes,
+    Paths,
 )
 from colab_leecher.utility.helper import (
     isYtdlComplete,
