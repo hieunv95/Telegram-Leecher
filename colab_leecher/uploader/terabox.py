@@ -1,5 +1,6 @@
 import os
 import json
+import re
 import hashlib
 import logging
 import requests
@@ -8,7 +9,7 @@ from random import choices
 from string import ascii_uppercase, digits
 from asyncio import to_thread
 from os import path as ospath
-from urllib.parse import urlencode, quote
+from urllib.parse import urlencode, quote, unquote
 from colab_leecher.utility.variables import Paths
 
 TERABOX_CHUNK_SIZE = 4 * 1024 * 1024
@@ -31,6 +32,61 @@ def _build_remote_path(remote_dir: str, file_name: str):
 
 def _cookie_header():
     return f"lang=en; ndus={Paths.TERABOX_NDUS};"
+
+
+def _refresh_js_token_from_main():
+    main_url = "https://dm.terabox.com/main"
+    try:
+        response = requests.get(
+            main_url,
+            headers=_request_headers(content_type=False),
+            timeout=120,
+        )
+        response.raise_for_status()
+    except Exception as exc:
+        logging.error("Failed to fetch Terabox main page for jsToken refresh: %s", exc)
+        return None
+
+    match = re.search(
+        r'var\s+templateData\s*=\s*(\{.*?\})\s*;',
+        response.text,
+        flags=re.DOTALL,
+    )
+    if not match:
+        logging.error("Unable to locate templateData payload in Terabox main page")
+        return None
+
+    try:
+        template_data = json.loads(match.group(1))
+    except Exception as exc:
+        logging.error("Failed to parse templateData JSON from Terabox main page: %s", exc)
+        return None
+
+    encoded_payload = template_data.get("jsToken")
+    if not encoded_payload:
+        logging.error("templateData does not contain jsToken")
+        return None
+
+    decoded_payload = unquote(encoded_payload)
+
+    token_match = re.search(r'fn\("([^"]+)"\)', decoded_payload)
+    if token_match:
+        new_token = token_match.group(1)
+    else:
+        # Fallback for layouts that expose the token directly.
+        new_token = decoded_payload
+
+    if not new_token:
+        logging.error("Extracted empty jsToken from Terabox main page")
+        return None
+
+    old_token = Paths.TERABOX_JS_TOKEN
+    Paths.TERABOX_JS_TOKEN = new_token
+    logging.info(
+        "Terabox jsToken refreshed from main page (changed=%s)",
+        bool(old_token != new_token),
+    )
+    return new_token
 
 
 def _dp_logid():
@@ -155,6 +211,10 @@ def _response_json(response, error_prefix: str, raise_on_error: bool = True):
     errmsg = payload.get("errmsg")
 
     if errno not in [0, None]:
+        token_refreshed = False
+        if _is_need_verify_error(errno, errmsg):
+            token_refreshed = bool(_refresh_js_token_from_main())
+
         logging.error(
             "%s: errno=%s errmsg=%s",
             error_prefix,
@@ -162,8 +222,11 @@ def _response_json(response, error_prefix: str, raise_on_error: bool = True):
             errmsg or "Unknown error",
         )
         if raise_on_error:
+            extra_note = ""
+            if token_refreshed:
+                extra_note = " (jsToken refreshed from /main, retry request)"
             raise RuntimeError(
-                f"{error_prefix}: errno={errno} errmsg={errmsg or 'Unknown error'}"
+                f"{error_prefix}: errno={errno} errmsg={errmsg or 'Unknown error'}{extra_note}"
             )
     else:
         logging.debug("%s: errno=%s", error_prefix, errno)
