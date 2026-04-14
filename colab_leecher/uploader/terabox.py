@@ -42,6 +42,17 @@ def _refresh_js_token_from_main():
             headers=_request_headers(content_type=False),
             timeout=120,
         )
+        logging.debug(
+            "Terabox main response: status=%s url=%s content_type=%s content_length=%s",
+            response.status_code,
+            response.url,
+            response.headers.get("Content-Type"),
+            response.headers.get("Content-Length"),
+        )
+        logging.debug(
+            "Terabox main response body preview: %s",
+            response.text[:2000],
+        )
         response.raise_for_status()
     except Exception as exc:
         logging.error("Failed to fetch Terabox main page for jsToken refresh: %s", exc)
@@ -86,6 +97,7 @@ def _refresh_js_token_from_main():
         "Terabox jsToken refreshed from main page (changed=%s)",
         bool(old_token != new_token),
     )
+    logging.debug("Terabox refreshed jsToken: %s", new_token)
     return new_token
 
 
@@ -214,6 +226,12 @@ def _response_json(response, error_prefix: str, raise_on_error: bool = True):
         token_refreshed = False
         if _is_need_verify_error(errno, errmsg):
             token_refreshed = bool(_refresh_js_token_from_main())
+            if token_refreshed:
+                logging.error(
+                    "%s: verify error persists after jsToken refresh; refreshed_jsToken=%s",
+                    error_prefix,
+                    Paths.TERABOX_JS_TOKEN,
+                )
 
         logging.error(
             "%s: errno=%s errmsg=%s",
