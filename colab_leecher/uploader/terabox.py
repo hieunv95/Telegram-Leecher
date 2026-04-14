@@ -15,6 +15,48 @@ from colab_leecher.utility.variables import Paths
 TERABOX_CHUNK_SIZE = 4 * 1024 * 1024
 
 
+class TeraboxRetryWithRefreshedToken(Exception):
+    """Signal that request should be retried once after jsToken refresh."""
+
+
+def _post_json_with_refresh_retry(
+    session,
+    url: str,
+    *,
+    headers: dict,
+    error_prefix: str,
+    data=None,
+    files=None,
+    timeout: int = 120,
+    raise_on_error: bool = True,
+    retry_url=None,
+):
+    response = session.post(
+        url,
+        headers=headers,
+        data=data,
+        files=files,
+        timeout=timeout,
+    )
+    try:
+        return _response_json(response, error_prefix, raise_on_error=raise_on_error)
+    except TeraboxRetryWithRefreshedToken as exc:
+        retry_target = retry_url() if callable(retry_url) else (retry_url or url)
+        logging.info("%s: retrying request with refreshed jsToken", error_prefix)
+        response = session.post(
+            retry_target,
+            headers=headers,
+            data=data,
+            files=files,
+            timeout=timeout,
+        )
+        return _response_json(
+            response,
+            f"{error_prefix} retry",
+            raise_on_error=raise_on_error,
+        )
+
+
 def _normalize_remote_dir(remote_dir: str):
     if not remote_dir:
         return "/"
@@ -232,6 +274,9 @@ def _response_json(response, error_prefix: str, raise_on_error: bool = True):
                     error_prefix,
                     Paths.TERABOX_JS_TOKEN,
                 )
+                raise TeraboxRetryWithRefreshedToken(
+                    f"{error_prefix}: retry after jsToken refresh"
+                )
 
         logging.error(
             "%s: errno=%s errmsg=%s",
@@ -296,16 +341,19 @@ def precheck_terabox_upload_session(remote_dir: str = ""):
 
     try:
         with requests.Session() as session:
-            precreate_res = session.post(
+            payload = _post_json_with_refresh_retry(
+                session,
                 precreate_url,
                 headers=_request_headers(content_type=True),
                 data=urlencode(precreate_data),
                 timeout=120,
-            )
-            payload = _response_json(
-                precreate_res,
-                "Terabox precheck precreate",
+                error_prefix="Terabox precheck precreate",
                 raise_on_error=False,
+                retry_url=lambda: build_precreate_url(
+                    Paths.TERABOX_APP_ID,
+                    Paths.TERABOX_JS_TOKEN,
+                    dp_logid,
+                ),
             )
     except Exception as exc:
         logging.error("Terabox precheck request failed: %s", exc)
@@ -354,13 +402,14 @@ def precheck_terabox_upload_session(remote_dir: str = ""):
 
 
 def _upload_chunk(session, upload_url: str, chunk: bytes, expected_md: str, partseq: int, upload_headers: dict, file_name: str):
-    upload_res = session.post(
+    upload_json = _post_json_with_refresh_retry(
+        session,
         upload_url,
         headers=upload_headers,
         files={"file": ("blob", chunk)},
         timeout=3600,
+        error_prefix=f"Terabox chunk {partseq} upload failed",
     )
-    upload_json = _response_json(upload_res, f"Terabox chunk {partseq} upload failed")
     uploaded_md = upload_json.get("md5")
     if not uploaded_md:
         raise RuntimeError(f"Terabox chunk {partseq} upload failed: missing md5")
@@ -435,13 +484,19 @@ def _upload_single_file(
             logging.info("Terabox progress callback failed: %s", callback_error)
 
     with requests.Session() as session:
-        precreate_res = session.post(
+        precreate_json = _post_json_with_refresh_retry(
+            session,
             precreate_url,
             headers=_request_headers(content_type=True),
             data=urlencode(precreate_data),
             timeout=180,
+            error_prefix="Terabox precreate failed",
+            retry_url=lambda: build_precreate_url(
+                Paths.TERABOX_APP_ID,
+                Paths.TERABOX_JS_TOKEN,
+                dp_logid,
+            ),
         )
-        precreate_json = _response_json(precreate_res, "Terabox precreate failed")
 
         uploadid = precreate_json.get("uploadid")
         if not uploadid:
@@ -537,13 +592,19 @@ def _upload_single_file(
             len(uploaded_block_list),
         )
 
-        create_res = session.post(
+        create_json = _post_json_with_refresh_retry(
+            session,
             create_url,
             headers=_request_headers(content_type=True),
             data=urlencode(create_data),
             timeout=180,
+            error_prefix="Terabox create failed",
+            retry_url=lambda: build_create_url(
+                Paths.TERABOX_APP_ID,
+                Paths.TERABOX_JS_TOKEN,
+                dp_logid,
+            ),
         )
-        create_json = _response_json(create_res, "Terabox create failed")
 
     return {
         "file_name": file_name,
