@@ -46,7 +46,11 @@ def _is_direct_http_url(link: str):
 
 def _extract_sources_and_options(lines):
     global BOT
-    temp_source = [line.strip() for line in lines if line and line.strip()]
+    # Filter out blank lines, whitespace-only lines, and comment lines
+    temp_source = [
+        line.strip() for line in lines 
+        if line and line.strip() and not line.strip().startswith("#")
+    ]
     if not temp_source:
         return []
 

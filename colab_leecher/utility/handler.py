@@ -53,6 +53,10 @@ async def Leech(folder_path: str, remove: bool):
     Transfer.total_down_size = getSize(folder_path)
 
     files = [str(p) for p in pathlib.Path(folder_path).glob("**/*") if p.is_file()]
+    total_files = len(files)
+    uploaded_count = 0
+    last_status_update = 0
+    
     for f in natsorted(files):
         file_path = ospath.join(folder_path, f)
 
@@ -72,19 +76,26 @@ async def Leech(folder_path: str, remove: bool):
                 new_path = shortFileName(short_path)
                 os.rename(short_path, new_path)
                 BotTimes.current_time = time()
-                Messages.status_head = f"<b>📤 UPLOADING SPLIT » {count} OF {len(dir_list)} Files</b>\n\n<code>{file_name}</code>\n"
-                try:
-                    await safe_edit_status(
-                        text=Messages.task_msg
-                        + Messages.status_head
-                        + "\n⏳ __Starting.....__"
-                        + sysINFO(),
-                        reply_markup=keyboard(),
-                    )
-                except Exception as d:
-                    logging.info(d)
+                
                 await upload_file(new_path, file_name)
                 Transfer.up_bytes.append(os.stat(new_path).st_size)
+                uploaded_count += 1
+                
+                # Batch status updates every 3 files or on completion to avoid rate limits
+                current_time = time()
+                if current_time - last_status_update >= 5 or uploaded_count >= total_files:
+                    Messages.status_head = f"<b>📤 UPLOADING » </b>{uploaded_count}/{total_files} Files\n"
+                    try:
+                        await safe_edit_status(
+                            text=Messages.task_msg
+                            + Messages.status_head
+                            + "\n⏳ __Processing.....__"
+                            + sysINFO(),
+                            reply_markup=keyboard(),
+                        )
+                    except Exception as d:
+                        logging.debug(f"Status update skipped: {d}")
+                    last_status_update = current_time
 
                 count += 1
 
@@ -101,22 +112,27 @@ async def Leech(folder_path: str, remove: bool):
             new_path = shortFileName(file_path)
             os.rename(file_path, new_path)
             BotTimes.current_time = time()
-            Messages.status_head = (
-                f"<b>📤 UPLOADING » </b>\n\n<code>{file_name}</code>\n"
-            )
-            try:
-                await safe_edit_status(
-                    text=Messages.task_msg
-                    + Messages.status_head
-                    + "\n⏳ __Starting.....__"
-                    + sysINFO(),
-                    reply_markup=keyboard(),
-                )
-            except Exception as d:
-                logging.error(f"Error updating status bar: {d}")
+            
             file_size = os.stat(new_path).st_size
             await upload_file(new_path, file_name)
             Transfer.up_bytes.append(file_size)
+            uploaded_count += 1
+            
+            # Batch status updates every 5 seconds or on completion to avoid rate limits
+            current_time = time()
+            if current_time - last_status_update >= 5 or uploaded_count >= total_files:
+                Messages.status_head = f"<b>📤 UPLOADING » </b>{uploaded_count}/{total_files} Files\n"
+                try:
+                    await safe_edit_status(
+                        text=Messages.task_msg
+                        + Messages.status_head
+                        + "\n⏳ __Processing.....__"
+                        + sysINFO(),
+                        reply_markup=keyboard(),
+                    )
+                except Exception as d:
+                    logging.debug(f"Status update skipped: {d}")
+                last_status_update = current_time
 
             if remove:
                 if ospath.exists(new_path):

@@ -290,6 +290,9 @@ async def _run_streaming_transfer_pipeline(
     downloaded_dirs = []
     terabox_tasks = []
     terabox_semaphore = asyncio.Semaphore(4)
+    total_sources = len(source)
+    processed_sources = 0
+    last_status_update = 0
 
     async def _on_source_complete(item):
         await source_queue.put(item)
@@ -331,9 +334,26 @@ async def _run_streaming_transfer_pipeline(
             source_dir = item.get("download_dir")
             source_url = item.get("source_url")
             source_index = item.get("source_index")
+            processed_sources += 1
 
             if source_dir and ospath.exists(source_dir):
                 downloaded_dirs.append(source_dir)
+
+            # Batch status updates every 5 seconds to avoid Telegram rate limits
+            current_time = time()
+            if current_time - last_status_update >= 5:
+                Messages.status_head = f"<b>📥 PROCESSED » </b>{processed_sources}/{total_sources} Sources\n"
+                try:
+                    await safe_edit_status(
+                        text=Messages.task_msg
+                        + Messages.status_head
+                        + "\n⏳ __Processing.....__"
+                        + sysINFO(),
+                        reply_markup=keyboard(),
+                    )
+                except Exception as d:
+                    logging.debug(f"Status update skipped: {d}")
+                last_status_update = current_time
 
             if upload_terabox and source_dir:
                 terabox_tasks.append(
