@@ -313,7 +313,14 @@ async def _run_streaming_transfer_pipeline(
     async def _upload_source_to_terabox(source_dir: str, source_url: str, source_index: int):
         async with terabox_semaphore:
             try:
-                await upload_to_terabox(source_dir, Paths.TERABOX_FOLDER)
+                await upload_to_terabox(
+                    source_dir,
+                    Paths.TERABOX_FOLDER,
+                    progress_callback=_terabox_progress_callback(
+                        asyncio.get_running_loop(),
+                        None,
+                    ),
+                )
             except Exception as error:
                 raise RuntimeError(
                     f"Terabox upload failed\nURL: {source_url}\nSource: {source_index}\nFile: {source_dir}\nError: {str(error)}"
